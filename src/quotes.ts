@@ -9,8 +9,10 @@
  */
 
 /**
- * True when every character is in the writer's unquoted-safe alphabet:
- * `[A-Za-z0-9_$/:.]`. The empty string is not safe — it must render as `""`.
+ * Whether every character is in the writer's unquoted-safe alphabet:
+ * `[A-Za-z0-9_$/:.]`.
+ *
+ * The empty string is not safe — it must render as `""`.
  */
 export function isSafeUnquoted(value: string): boolean {
   if (value.length === 0) {
@@ -34,7 +36,10 @@ export function isSafeUnquoted(value: string): boolean {
   return true;
 }
 
-/** True when the string contains characters that require escape sequences. */
+/**
+ * Whether the string contains characters that require escape sequences
+ * inside a quoted string: control characters, `"`, `\`, or DEL.
+ */
 export function needsEscaping(value: string): boolean {
   for (let i = 0; i < value.length; i++) {
     const code = value.charCodeAt(i);
@@ -94,9 +99,10 @@ export function escapeString(value: string): string {
 }
 
 /**
- * Renders a string value with quotes exactly when required: safe literals
- * stay bare, everything else is wrapped in double quotes, and escape
- * processing runs only when an escapable character is present.
+ * Renders a string value with quotes exactly when required.
+ *
+ * Safe literals stay bare, everything else is wrapped in double quotes, and
+ * escape processing runs only when an escapable character is present.
  */
 export function ensureQuotes(value: string): string {
   if (isSafeUnquoted(value)) {
@@ -108,7 +114,9 @@ export function ensureQuotes(value: string): string {
   return `"${escapeString(value)}"`;
 }
 
-/** Renders binary data as an uppercase hex run: `<DEADBEEF>`. */
+/**
+ * Renders binary data as an uppercase hex run: `<DEADBEEF>`.
+ */
 export function formatData(data: Uint8Array): string {
   let hex = "";
   for (const byte of data) {

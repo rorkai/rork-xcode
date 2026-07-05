@@ -90,6 +90,10 @@ Booleans are rejected on purpose: the format has no boolean notation — Xcode m
 
 `rork-xcode` is measured against the pbxproj parsers on npm — [`@bacons/xcode`](https://www.npmjs.com/package/@bacons/xcode) (its `/json` parse/build entry point) and [`xcode`](https://www.npmjs.com/package/xcode) (the long-standing package used by native build tooling) — on three documents: two real Xcode-written projects from the test suite and a deterministically generated five-target app with 800 source files. It is the fastest at both operations on every document, with zero dependencies.
 
+<p align="center">
+  <img src="assets/performance.svg" alt="Benchmark chart comparing rork-xcode with the @bacons/xcode and xcode packages. Bars show time relative to rork-xcode as the geometric mean over three project documents. Parsing, @bacons/xcode takes 1.3 times as long and xcode 21 times. Building, xcode takes 1.6 times as long and @bacons/xcode 9 times." width="880" />
+</p>
+
 | Operation | Document                | `rork-xcode` | `@bacons/xcode`  | `xcode`          |
 | --------- | ----------------------- | ------------ | ---------------- | ---------------- |
 | parse     | legacy app (7 KiB)      | **13.9 µs**  | 17.8 µs (1.3×)   | 297.7 µs (21.4×) |

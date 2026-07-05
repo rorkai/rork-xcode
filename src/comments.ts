@@ -13,21 +13,42 @@
 
 import type { PbxprojObject, PbxprojValue } from "./types";
 
-/** Narrow to a dictionary value (arrays and data are objects too at runtime). */
+/**
+ * Narrows a value to a dictionary.
+ *
+ * Arrays and `Uint8Array` data are objects at runtime too, so a bare
+ * `typeof` check is not enough.
+ */
 export function isDictionary(value: PbxprojValue | undefined): value is PbxprojObject {
   return typeof value === "object" && value !== null && !Array.isArray(value) && !(value instanceof Uint8Array);
 }
 
+/**
+ * Returns the value when it is a string, and `undefined` otherwise.
+ *
+ * Field access on parsed documents goes through this because any field of
+ * an untrusted document can hold any value type.
+ */
 function asString(value: PbxprojValue | undefined): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
+/**
+ * What a build-file comment needs to know about the phase containing it.
+ */
 interface PhaseInfo {
+  /** The phase's isa, e.g. `PBXSourcesBuildPhase`. */
   isa: string;
+
+  /** The phase's explicit `name` field, when present. */
   name: string | undefined;
 }
 
-/** `PBXSourcesBuildPhase` → `Sources`; undefined for non-phase isa names. */
+/**
+ * Derives the display name of a build phase from its isa:
+ * `PBXSourcesBuildPhase` becomes `Sources`. Returns `undefined` for isa
+ * names outside the `PBX…BuildPhase` pattern.
+ */
 function defaultBuildPhaseName(isa: string): string | undefined {
   if (isa.startsWith("PBX") && isa.endsWith("BuildPhase")) {
     return isa.slice("PBX".length, isa.length - "BuildPhase".length);
@@ -35,7 +56,13 @@ function defaultBuildPhaseName(isa: string): string | undefined {
   return undefined;
 }
 
-/** Repository name for Swift package reference comments. */
+/**
+ * Extracts the repository name for a Swift package reference comment.
+ *
+ * GitHub URLs reduce to their last path segment without the `.git` suffix;
+ * anything else is used verbatim, which matches how Xcode renders unknown
+ * hosts.
+ */
 function repoNameFromUrl(repoUrl: string): string {
   for (const prefix of ["https://github.com/", "http://github.com/"]) {
     if (repoUrl.startsWith(prefix)) {
@@ -50,10 +77,12 @@ function repoNameFromUrl(repoUrl: string): string {
 }
 
 /**
- * Builds the uuid → comment map for a parsed project document.
+ * Builds the uuid-to-comment map for a parsed project document.
  *
  * Objects that should render without a comment (unnamed groups) map to the
  * empty string; uuids absent from the map are not references at all.
+ * Derivation is linear over the object graph: reverse indexes are built in
+ * one pass, and every object's comment is computed once and cached.
  */
 export function createReferenceComments(root: PbxprojValue): Map<string, string> {
   const cache = new Map<string, string>();
@@ -103,9 +132,17 @@ export function createReferenceComments(root: PbxprojValue): Map<string, string>
     }
   }
 
+  /**
+   * The name an object displays as when nothing more specific applies:
+   * `name`, then `productName`, then `path`, then its isa.
+   */
   const defaultName = (object: PbxprojObject, isa: string): string =>
     asString(object["name"]) ?? asString(object["productName"]) ?? asString(object["path"]) ?? isa;
 
+  /**
+   * Comment for a `PBXBuildFile`: the referenced file's own comment plus
+   * the phase it belongs to, e.g. `AppDelegate.swift in Sources`.
+   */
   const buildFileComment = (id: string, buildFile: PbxprojObject): string => {
     const phase = fileToPhase.get(id);
     const phaseName = phase == null ? "[missing build phase]" : (phase.name ?? defaultBuildPhaseName(phase.isa) ?? "");
@@ -117,6 +154,10 @@ export function createReferenceComments(root: PbxprojValue): Map<string, string>
     return `${name ?? "(null)"} in ${phaseName}`;
   };
 
+  /**
+   * Comment for an `XCConfigurationList`, naming the target or project that
+   * owns it, e.g. `Build configuration list for PBXNativeTarget "App"`.
+   */
   const configurationListComment = (id: string): string => {
     const ownerEntry = configurationListOwners.get(id);
     if (ownerEntry == null) {
@@ -151,6 +192,11 @@ export function createReferenceComments(root: PbxprojValue): Map<string, string>
     return `Build configuration list for ${isa}`;
   };
 
+  /**
+   * Derives (and caches) the comment for one object, dispatching on its
+   * isa. Returns `undefined` for objects with no isa and for re-entrant
+   * lookups on a reference cycle.
+   */
   const commentFor = (id: string, object: PbxprojObject): string | undefined => {
     const cached = cache.get(id);
     if (cached != null) {

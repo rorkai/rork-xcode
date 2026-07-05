@@ -50,13 +50,18 @@ const xcodeParser = require("xcode/lib/parser/pbxproj") as {
  */
 const classicProject = xcodePackage.project("project.pbxproj");
 
-/** Serializes a document through the xcode package's project writer. */
+/**
+ * Serializes a document through the xcode package's project writer.
+ */
 function xcodeWrite(hash: unknown): string {
   classicProject.hash = hash;
   return classicProject.writeSync();
 }
 
-/** Parses a fixture and narrows the root to the dictionary every pbxproj document has. */
+/**
+ * Parses a fixture and narrows the root to the dictionary shape every
+ * pbxproj document has.
+ */
 function parseDocument(text: string): PbxprojObject {
   const document = parsePbxproj(text);
   if (typeof document !== "object" || document === null || Array.isArray(document) || document instanceof Uint8Array) {
@@ -65,7 +70,9 @@ function parseDocument(text: string): PbxprojObject {
   return document;
 }
 
-/** Deterministic 24-hex-digit ids in the style Xcode generates. */
+/**
+ * Formats a deterministic 24-hex-digit id in the style Xcode generates.
+ */
 const id = (n: number): string => `AA${n.toString(16).toUpperCase().padStart(20, "0")}BB`;
 
 /**
@@ -209,12 +216,16 @@ function generateLargeProject(): PbxprojObject {
   };
 }
 
+/** The measured documents: two real Xcode-written projects and the generated app. */
 const fixtures: Record<string, string> = {
   "legacy app": readFileSync(new URL("../tests/fixtures/legacy-groups.pbxproj", import.meta.url), "utf-8"),
   "app (Xcode 16)": readFileSync(new URL("../tests/fixtures/app-xcode16.pbxproj", import.meta.url), "utf-8"),
   "generated app": buildPbxproj(generateLargeProject()),
 };
 
+/**
+ * Runs one timing batch and returns the mean nanoseconds per operation.
+ */
 function batchNsPerOp(fn: () => unknown, iterations: number): number {
   const start = process.hrtime.bigint();
   for (let i = 0; i < iterations; i++) {
@@ -223,18 +234,32 @@ function batchNsPerOp(fn: () => unknown, iterations: number): number {
   return Number(process.hrtime.bigint() - start) / iterations;
 }
 
+/**
+ * Returns the median of the values.
+ */
 function median(values: number[]): number {
   const sorted = values.toSorted((a, b) => a - b);
   return sorted[sorted.length >> 1]!;
 }
 
+/** Batches per entry; the reported figure is their median. */
 const BATCHES = 15;
+
+/** Target wall-clock duration of one batch, used to calibrate iteration counts. */
 const TARGET_BATCH_NS = 60e6;
 
+/** A labeled operation to measure. */
 type Entry = [label: string, fn: () => unknown];
+
+/** A label with its measured median nanoseconds per operation. */
 type Result = [label: string, nsPerOp: number];
 
-/** Runs the entries interleaved and returns nanoseconds per operation each. */
+/**
+ * Measures the entries as interleaved round-robin batches (library A, B, C,
+ * then A again) so JIT tiering, garbage collection, and thermal drift hit
+ * every library equally. Returns the median nanoseconds per operation for
+ * each entry.
+ */
 function compare(entries: Entry[]): Result[] {
   const calibrated = entries.map(([label, fn]) => {
     fn();
@@ -251,6 +276,9 @@ function compare(entries: Entry[]): Result[] {
   return calibrated.map(({ label, samples }) => [label, median(samples)]);
 }
 
+/**
+ * Formats nanoseconds with a unit matching their magnitude.
+ */
 function formatTime(ns: number): string {
   if (ns < 1e3) {
     return `${ns.toFixed(0)} ns`;

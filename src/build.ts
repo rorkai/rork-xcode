@@ -21,12 +21,16 @@ import { PbxprojBuildError } from "./errors";
 import { ensureQuotes, formatData } from "./quotes";
 import type { PbxprojObject, PbxprojValue } from "./types";
 
+/** The encoding marker Xcode writes on the first line of every document. */
 const SHEBANG = "// !$*UTF8*$!";
 
 /**
- * Build-setting keys whose integral values Xcode writes with a trailing
- * `.0` (`SWIFT_VERSION = 5.0;`). The all-uppercase guard keeps ordinary
- * lowercase keys like `name` out of the heuristic.
+ * Whether a build-setting key takes float-formatted integral values.
+ *
+ * Xcode writes some settings with a trailing `.0` (`SWIFT_VERSION = 5.0;`),
+ * so integers under these keys must render the same way to survive
+ * round-trips. The all-uppercase guard keeps ordinary lowercase keys like
+ * `name` out of the heuristic.
  */
 function keyHasFloatValue(key: string): boolean {
   for (let i = 0; i < key.length; i++) {
@@ -38,7 +42,11 @@ function keyHasFloatValue(key: string): boolean {
   return key.endsWith("SWIFT_VERSION") || key.endsWith("MARKETING_VERSION") || key.endsWith("_DEPLOYMENT_TARGET");
 }
 
-/** The caller has already rejected non-finite values (with the value's path). */
+/**
+ * Renders a finite number, applying the trailing-`.0` rule for float-valued
+ * build-setting keys. The caller has already rejected non-finite values
+ * with the value's path.
+ */
 function formatNumber(value: number, key: string): string {
   if (Number.isInteger(value) && keyHasFloatValue(key)) {
     return `${value}.0`;
@@ -46,10 +54,18 @@ function formatNumber(value: number, key: string): string {
   return String(value);
 }
 
+/**
+ * Creates the error for a `NaN` or infinite number at the given value path.
+ */
 function nonFiniteNumber(value: number, path: string): PbxprojBuildError {
   return new PbxprojBuildError(`Cannot serialize non-finite number ${String(value)}`, path);
 }
 
+/**
+ * Creates the error for a value outside the pbxproj value model (`null`,
+ * booleans, bigints, functions, symbols, class instances) at the given
+ * value path.
+ */
 function invalidValue(value: unknown, path: string): PbxprojBuildError {
   const kind = value === null ? "null" : typeof value;
   return new PbxprojBuildError(
@@ -59,15 +75,27 @@ function invalidValue(value: unknown, path: string): PbxprojBuildError {
 }
 
 /**
- * Comments derive from document fields (names, paths), so a value containing
- * `*​/` could otherwise terminate the comment early and corrupt the output.
+ * Defuses `*​/` sequences inside derived comment text.
+ *
+ * Comments derive from document fields (names, paths), so a crafted value
+ * containing `*​/` could otherwise terminate the comment early and corrupt
+ * the surrounding document.
  */
 function sanitizeComment(comment: string): string {
   return comment.includes("*/") ? comment.replaceAll("*/", "* /") : comment;
 }
 
-/** Indentation strings by depth, extended on demand; avoids a `repeat` allocation per line. */
+/**
+ * Indentation strings by depth, extended on demand.
+ *
+ * Sharing the strings avoids a `"\t".repeat(depth)` allocation on every
+ * line of output.
+ */
 const INDENTS: string[] = [""];
+
+/**
+ * Returns the shared indentation string for a nesting depth.
+ */
 function indentString(depth: number): string {
   let known = INDENTS[INDENTS.length - 1]!;
   while (INDENTS.length <= depth) {
@@ -77,10 +105,25 @@ function indentString(depth: number): string {
   return INDENTS[depth]!;
 }
 
+/**
+ * Serialization state for one {@link buildPbxproj} call.
+ *
+ * The `write*` methods append directly to the output string; the `render*`
+ * methods return fragments for the caller to place. Output accumulates by
+ * appending — engines represent growing strings as ropes, so appends stay
+ * cheap where template interpolation would allocate an intermediate string
+ * per line.
+ */
 class Writer {
+  /** The document text accumulated so far. */
   private out = "";
+
+  /** Current nesting depth; one tab per level. */
   private indent = 0;
+
+  /** Display comment per referenced uuid, derived once from the object graph. */
   private readonly comments: Map<string, string>;
+
   /**
    * Rendered string values by input string: `id /* comment *​/` for
    * referenced uuids, quoted text for everything else. Referenced objects
@@ -89,36 +132,55 @@ class Writer {
    * cache hits. The map lives for one build call only.
    */
   private readonly renderedReferences = new Map<string, string>();
+
   /**
    * Quoting decisions for dictionary keys, which draw from a small repeated
    * vocabulary (`isa`, `fileRef`, build-setting names).
    */
   private readonly quotedKeys = new Map<string, string>();
 
+  /**
+   * Serializes the whole document eagerly; read it back with
+   * {@link toString}.
+   *
+   * @param root The document root dictionary.
+   */
   constructor(root: PbxprojObject) {
     this.comments = createReferenceComments(root);
     this.out = `${SHEBANG}\n`;
-    this.line("{");
+    this.writeLine("{");
     this.indent++;
     this.writeObjectBody(root, true, "$");
     this.indent--;
-    this.line("}");
+    this.writeLine("}");
   }
 
-  result(): string {
+  /**
+   * Returns the serialized document text.
+   */
+  toString(): string {
     return this.out;
   }
 
-  private pad(): void {
+  /**
+   * Appends the indentation for the current depth.
+   */
+  private writeIndent(): void {
     this.out += indentString(this.indent);
   }
 
-  private line(text: string): void {
+  /**
+   * Appends one indented line followed by a newline.
+   */
+  private writeLine(text: string): void {
     this.out += `${indentString(this.indent)}${text}\n`;
   }
 
-  /** A uuid reference with its display comment, or a plain quoted value. */
-  private referenceOrValue(id: string): string {
+  /**
+   * Renders a string as a uuid reference with its display comment, or as a
+   * plain quoted value when no comment is derived for it.
+   */
+  private renderReference(id: string): string {
     const cached = this.renderedReferences.get(id);
     if (cached != null) {
       return cached;
@@ -130,7 +192,11 @@ class Writer {
     return rendered;
   }
 
-  private quotedKey(key: string): string {
+  /**
+   * Renders a dictionary key with quotes when the format requires them,
+   * memoized across the document.
+   */
+  private renderKey(key: string): string {
     const cached = this.quotedKeys.get(key);
     if (cached != null) {
       return cached;
@@ -141,51 +207,60 @@ class Writer {
   }
 
   /**
+   * Renders a string value in its key's context.
+   *
    * `remoteGlobalIDString` and `TestTargetID` hold uuids of objects in
-   * *another* container; annotating them with this container's comments
-   * would be wrong, so they render bare.
+   * another container; annotating them with this container's comments would
+   * be wrong, so they render bare.
    */
-  private stringValue(key: string, value: string): string {
+  private renderStringValue(key: string, value: string): string {
     if (key === "remoteGlobalIDString" || key === "TestTargetID") {
       return ensureQuotes(value);
     }
-    return this.referenceOrValue(value);
+    return this.renderReference(value);
   }
 
-  // Value paths (`$.objects.AA….name`) exist for error messages and are only
-  // constructed in the branches that recurse or throw; the flat string and
-  // number lines that dominate documents skip the concatenation. Output is
-  // appended piecewise — engines represent string concatenation as ropes, so
-  // appends are cheap while interpolation templates would allocate an
-  // intermediate string per line.
+  /**
+   * Appends the entries of a dictionary, one `key = value;` line each.
+   *
+   * Value paths (`$.objects.AA….name`) exist for error messages and are
+   * only constructed in the branches that recurse or throw; the flat string
+   * and number lines that dominate documents skip the concatenation.
+   *
+   * @param object The dictionary whose entries to write.
+   * @param isBase Whether this is the document root, where the `objects`
+   *   dictionary gets section grouping and empty dictionaries render
+   *   multi-line.
+   * @param path Value path of `object`, for error messages.
+   */
   private writeObjectBody(object: PbxprojObject, isBase: boolean, path: string): void {
     for (const key of Object.keys(object)) {
       const value = object[key];
       if (typeof value === "string") {
         this.out += indentString(this.indent);
-        this.out += this.quotedKey(key);
+        this.out += this.renderKey(key);
         this.out += " = ";
-        this.out += this.stringValue(key, value);
+        this.out += this.renderStringValue(key, value);
         this.out += ";\n";
       } else if (typeof value === "number") {
         if (!Number.isFinite(value)) {
           throw nonFiniteNumber(value, `${path}.${key}`);
         }
         this.out += indentString(this.indent);
-        this.out += this.quotedKey(key);
+        this.out += this.renderKey(key);
         this.out += " = ";
         this.out += formatNumber(value, key);
         this.out += ";\n";
       } else if (value instanceof Uint8Array) {
-        this.line(`${this.quotedKey(key)} = ${formatData(value)};`);
+        this.writeLine(`${this.renderKey(key)} = ${formatData(value)};`);
       } else if (Array.isArray(value)) {
         this.writeArray(key, value, `${path}.${key}`);
       } else if (isDictionary(value)) {
         if (!isBase && Object.keys(value).length === 0) {
-          this.line(`${this.quotedKey(key)} = {};`);
+          this.writeLine(`${this.renderKey(key)} = {};`);
           continue;
         }
-        this.line(`${this.quotedKey(key)} = {`);
+        this.writeLine(`${this.renderKey(key)} = {`);
         this.indent++;
         if (isBase && key === "objects") {
           this.writeObjectsSections(value, `${path}.${key}`);
@@ -195,14 +270,19 @@ class Writer {
           this.writeObjectBody(value, false, `${path}.${key}`);
         }
         this.indent--;
-        this.line("};");
+        this.writeLine("};");
       } else {
         throw invalidValue(value, `${path}.${key}`);
       }
     }
   }
 
-  /** The root `objects` dictionary, grouped into per-isa sections. */
+  /**
+   * Appends the root `objects` dictionary grouped into per-isa sections.
+   *
+   * Sections are ordered by isa name and entries within a section by uuid,
+   * exactly as Xcode sorts them.
+   */
   private writeObjectsSections(objects: PbxprojObject, path: string): void {
     const byIsa = new Map<string, [string, PbxprojObject][]>();
     for (const id of Object.keys(objects)) {
@@ -226,22 +306,22 @@ class Writer {
       const entries = (byIsa.get(isa) ?? []).toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
 
       for (const [id, object] of entries) {
-        this.pad();
+        this.writeIndent();
         // Build files and file references render inline; Xcode keeps these
         // high-volume sections one entry per line.
         if (isa === "PBXBuildFile" || isa === "PBXFileReference") {
-          let text = this.inlineObject(id, object, `${path}.${id}`);
+          let text = this.renderInlineObject(id, object, `${path}.${id}`);
           if (text.endsWith(" ")) {
             text = text.slice(0, -1);
           }
           this.out += text;
           this.out += "\n";
         } else {
-          this.out += `${this.referenceOrValue(id)} = {\n`;
+          this.out += `${this.renderReference(id)} = {\n`;
           this.indent++;
           this.writeObjectBody(object, false, `${path}.${id}`);
           this.indent--;
-          this.line("};");
+          this.writeLine("};");
         }
       }
 
@@ -249,23 +329,26 @@ class Writer {
     }
   }
 
-  /** One `uuid /* comment *​/ = {isa = …; };` line. */
-  private inlineObject(key: string, object: PbxprojObject, path: string): string {
-    let text = `${this.referenceOrValue(key)} = {`;
+  /**
+   * Renders one object as a single `uuid /* comment *​/ = {isa = …; };`
+   * fragment, recursing into nested dictionaries inline.
+   */
+  private renderInlineObject(key: string, object: PbxprojObject, path: string): string {
+    let text = `${this.renderReference(key)} = {`;
 
     for (const innerKey of Object.keys(object)) {
       const value = object[innerKey];
       if (typeof value === "string") {
-        text += `${this.quotedKey(innerKey)} = ${this.stringValue(innerKey, value)}; `;
+        text += `${this.renderKey(innerKey)} = ${this.renderStringValue(innerKey, value)}; `;
       } else if (typeof value === "number") {
         if (!Number.isFinite(value)) {
           throw nonFiniteNumber(value, `${path}.${innerKey}`);
         }
-        text += `${this.quotedKey(innerKey)} = ${formatNumber(value, innerKey)}; `;
+        text += `${this.renderKey(innerKey)} = ${formatNumber(value, innerKey)}; `;
       } else if (value instanceof Uint8Array) {
-        text += `${this.quotedKey(innerKey)} = ${formatData(value)}; `;
+        text += `${this.renderKey(innerKey)} = ${formatData(value)}; `;
       } else if (Array.isArray(value)) {
-        text += `${this.quotedKey(innerKey)} = (`;
+        text += `${this.renderKey(innerKey)} = (`;
         for (let index = 0; index < value.length; index++) {
           const item = value[index];
           if (typeof item === "string") {
@@ -280,7 +363,7 @@ class Writer {
         }
         text += "); ";
       } else if (isDictionary(value)) {
-        text += this.inlineObject(innerKey, value, `${path}.${innerKey}`);
+        text += this.renderInlineObject(innerKey, value, `${path}.${innerKey}`);
       } else {
         throw invalidValue(value, `${path}.${innerKey}`);
       }
@@ -290,36 +373,40 @@ class Writer {
     return text;
   }
 
+  /**
+   * Appends a `key = ( item, … );` array with one indented line per item,
+   * the layout Xcode uses for every multi-line list.
+   */
   private writeArray(key: string, items: PbxprojValue[], path: string): void {
-    this.line(`${this.quotedKey(key)} = (`);
+    this.writeLine(`${this.renderKey(key)} = (`);
     this.indent++;
 
     for (let index = 0; index < items.length; index++) {
       const item = items[index];
       if (typeof item === "string") {
         this.out += indentString(this.indent);
-        this.out += this.referenceOrValue(item);
+        this.out += this.renderReference(item);
         this.out += ",\n";
       } else if (typeof item === "number") {
         if (!Number.isFinite(item)) {
           throw nonFiniteNumber(item, `${path}[${index}]`);
         }
-        this.line(`${formatNumber(item, "")},`);
+        this.writeLine(`${formatNumber(item, "")},`);
       } else if (item instanceof Uint8Array) {
-        this.line(`${formatData(item)},`);
+        this.writeLine(`${formatData(item)},`);
       } else if (isDictionary(item)) {
-        this.line("{");
+        this.writeLine("{");
         this.indent++;
         this.writeObjectBody(item, false, `${path}[${index}]`);
         this.indent--;
-        this.line("},");
+        this.writeLine("},");
       } else {
         throw invalidValue(item, `${path}[${index}]`);
       }
     }
 
     this.indent--;
-    this.line(");");
+    this.writeLine(");");
   }
 }
 
@@ -343,5 +430,5 @@ export function buildPbxproj(root: PbxprojObject): string {
   if (!isDictionary(root)) {
     throw new PbxprojBuildError("The document root must be a dictionary", "$");
   }
-  return new Writer(root).result();
+  return new Writer(root).toString();
 }

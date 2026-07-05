@@ -8,6 +8,7 @@
  * @module
  */
 
+/** UTF-16 code unit of `\n`, used to count lines when reporting a failure. */
 const LINE_FEED = 0x0a;
 
 /**

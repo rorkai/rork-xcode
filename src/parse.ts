@@ -30,6 +30,7 @@ const IS_LITERAL_CHAR: Uint8Array = (() => {
   return table;
 })();
 
+// UTF-16 code units of the characters the scanner dispatches on.
 const CODE_TAB = 0x09;
 const CODE_LINE_FEED = 0x0a;
 const CODE_CARRIAGE_RETURN = 0x0d;
@@ -53,7 +54,12 @@ const CODE_BACKSLASH = 0x5c;
 const CODE_OPEN_BRACE = 0x7b;
 const CODE_CLOSE_BRACE = 0x7d;
 
-/** Whitespace classification as a table read — the single hottest check in the scanner. */
+/**
+ * Whitespace classification as a 256-entry table.
+ *
+ * This is the single hottest check in the scanner, so it compiles to one
+ * array read instead of four comparisons.
+ */
 const IS_WHITESPACE: Uint8Array = (() => {
   const table = new Uint8Array(256);
   table[CODE_SPACE] = 1;
@@ -63,30 +69,58 @@ const IS_WHITESPACE: Uint8Array = (() => {
   return table;
 })();
 
+/**
+ * Whether the code unit is an ASCII decimal digit (`0-9`).
+ */
 function isDigit(code: number): boolean {
   return code >= CODE_ZERO && code <= CODE_NINE;
 }
 
+/**
+ * Whether the code unit is an ASCII hexadecimal digit (`0-9A-Fa-f`).
+ */
 function isHexDigit(code: number): boolean {
   return isDigit(code) || (code >= 0x41 && code <= 0x46) || (code >= 0x61 && code <= 0x66);
 }
 
+/**
+ * Scanner state and grammar productions for one parse call.
+ *
+ * The parser holds a single cursor into the source string and advances it
+ * through the `read*` and `parse*` methods; there is no separate tokenizer
+ * stage and no token objects.
+ */
 class Parser {
+  /** Source text of the document being parsed. */
   readonly input: string;
+
+  /** Cursor position as a UTF-16 code unit offset into {@link input}. */
   pos = 0;
 
+  /**
+   * @param input Source text of the document.
+   */
   constructor(input: string) {
     this.input = input;
   }
 
+  /**
+   * Throws a {@link PbxprojParseError} carrying the line and column of the
+   * failure.
+   *
+   * @param message Failure description without location.
+   * @param offset Offset of the failure; defaults to the current cursor.
+   */
   fail(message: string, offset = this.pos): never {
     throw new PbxprojParseError(message, this.input, offset);
   }
 
   /**
-   * Skips whitespace and `//` / `/* *​/` comments in bulk. Comment bodies are
-   * jumped over with `indexOf` rather than scanned per character — reference
-   * comments make up a sizable share of a canonical document's bytes.
+   * Skips whitespace and `//` / `/* *​/` comments in bulk.
+   *
+   * Comment bodies are jumped over with `indexOf` rather than scanned per
+   * character — reference comments make up a sizable share of a canonical
+   * document's bytes, and `indexOf` uses the engine's vectorized search.
    */
   skipTrivia(): void {
     const input = this.input;
@@ -120,12 +154,21 @@ class Parser {
     this.pos = pos;
   }
 
-  /** The next significant code unit, or -1 at end of input. */
+  /**
+   * Returns the next significant code unit without consuming it, or -1 at
+   * end of input. Trivia before it is consumed.
+   */
   peek(): number {
     this.skipTrivia();
     return this.pos < this.input.length ? this.input.charCodeAt(this.pos) : -1;
   }
 
+  /**
+   * Consumes the expected code unit or fails with a message naming it.
+   *
+   * @param code The expected UTF-16 code unit.
+   * @param description How the character reads in the error message.
+   */
   expect(code: number, description: string): void {
     // Canonical documents place `=` and `;` directly after tokens, so the
     // expected character is usually at the cursor with no trivia before it
@@ -143,7 +186,11 @@ class Parser {
     this.fail(`Expected '${description}' but found ${found}`);
   }
 
-  /** Reads an unquoted literal run. The caller guarantees at least one literal character. */
+  /**
+   * Reads an unquoted literal run and returns it as text.
+   *
+   * The caller guarantees the cursor is on at least one literal character.
+   */
   readLiteral(): string {
     const input = this.input;
     const length = input.length;
@@ -156,7 +203,13 @@ class Parser {
     return input.slice(start, pos);
   }
 
-  /** Reads a quoted string; the opening quote is at the current position. */
+  /**
+   * Reads a quoted string; the opening quote is at the current position.
+   *
+   * The scan tracks whether any escape sequence occurred: unescaped strings
+   * (the overwhelming majority) return as a direct slice, and only escaped
+   * ones pay for {@link unescapeString}.
+   */
   readQuotedString(): string {
     const input = this.input;
     const length = input.length;
@@ -185,7 +238,14 @@ class Parser {
     return hasEscape ? unescapeString(raw) : raw;
   }
 
-  /** Reads a `<hex bytes>` data run; the `<` is at the current position. */
+  /**
+   * Reads a `<hex bytes>` data run into a `Uint8Array`; the `<` is at the
+   * current position.
+   *
+   * Whitespace between digits is allowed (Xcode writes `<AB CD>`), and the
+   * digit count must be even — Apple's parser rejects odd counts, and
+   * padding would guess a byte.
+   */
   readData(): Uint8Array {
     const input = this.input;
     const length = input.length;
@@ -209,7 +269,6 @@ class Parser {
     }
     this.pos++; // skip >
 
-    // Apple's parser rejects odd digit counts; padding would guess a byte.
     if (hex.length % 2 !== 0) {
       this.fail("Data run has an odd number of hex digits", start);
     }
@@ -221,6 +280,9 @@ class Parser {
     return bytes;
   }
 
+  /**
+   * Parses the document root: a dictionary or an array.
+   */
   parseDocument(): PbxprojValue {
     const code = this.peek();
     if (code === CODE_OPEN_BRACE) return this.parseObject();
@@ -229,6 +291,11 @@ class Parser {
     this.fail(`Expected '{' or '(' at the start of the document but found '${this.input[this.pos]}'`);
   }
 
+  /**
+   * Parses a `{ key = value; ... }` dictionary; the `{` is at the current
+   * position. Keys may be quoted or unquoted, and every entry requires the
+   * `=` and terminating `;`.
+   */
   parseObject(): PbxprojObject {
     const input = this.input;
     const length = input.length;
@@ -270,6 +337,11 @@ class Parser {
     }
   }
 
+  /**
+   * Parses a `( item, item, ... )` array; the `(` is at the current
+   * position. A trailing comma before `)` is allowed — Xcode writes one
+   * after every item.
+   */
   parseArray(): PbxprojValue[] {
     const input = this.input;
     const length = input.length;
@@ -285,7 +357,7 @@ class Parser {
         this.pos++;
         return items;
       }
-      items.push(this.parseValueAtSignificant());
+      items.push(this.parseValueAtCursor());
       // Items are comma-separated; accepting bare whitespace would silently
       // merge malformed input (Apple's parser rejects it too).
       const next = this.peek();
@@ -297,16 +369,24 @@ class Parser {
     }
   }
 
+  /**
+   * Parses any value after consuming leading trivia.
+   */
   parseValue(): PbxprojValue {
     this.skipTrivia();
     if (this.pos >= this.input.length) {
       this.fail("Expected a value but found end of input");
     }
-    return this.parseValueAtSignificant();
+    return this.parseValueAtCursor();
   }
 
-  /** Dispatches on the current character; the caller has skipped trivia and checked bounds. */
-  parseValueAtSignificant(): PbxprojValue {
+  /**
+   * Parses the value starting exactly at the cursor, dispatching on its
+   * first character. The caller has already skipped trivia and checked
+   * bounds, so the loops that call this in sequence skip one redundant
+   * trivia scan per element.
+   */
+  parseValueAtCursor(): PbxprojValue {
     const code = this.input.charCodeAt(this.pos);
     if (code === CODE_OPEN_BRACE) return this.parseObject();
     if (code === CODE_OPEN_PAREN) return this.parseArray();

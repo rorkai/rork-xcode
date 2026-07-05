@@ -5,14 +5,13 @@
  * arrays, strings, and hexadecimal data runs. The format carries no type
  * markers beyond quoting, so the mapping is driven by lexical shape:
  *
- * | Source shape                                | JavaScript value        |
- * | ------------------------------------------- | ----------------------- |
- * | `{ key = value; ... }`                      | {@link PbxprojObject}   |
- * | `( item, item, ... )`                       | {@link PbxprojArray}    |
- * | unquoted digit run (`46`)                   | `number`                |
- * | unquoted decimal not ending in `0` (`3.14`) | `number`                |
- * | `<48656c6c6f>`                              | `Uint8Array`            |
- * | everything else                             | `string`                |
+ * - `{ key = value; ... }` parses to a {@link PbxprojObject}.
+ * - `( item, item, ... )` parses to a {@link PbxprojArray}.
+ * - Unquoted digit runs (`46`) and decimals not ending in `0` (`3.14`)
+ *   parse to `number`.
+ * - `<48656c6c6f>` data runs parse to `Uint8Array`.
+ * - Everything else — quoted text, identifiers, uuids, paths — parses to
+ *   `string`.
  *
  * Three deliberate string preservations keep round-trips faithful:
  *
@@ -27,7 +26,12 @@
  * @module
  */
 
-/** A value representable in a `project.pbxproj` document. */
+/**
+ * A value representable in a `project.pbxproj` document.
+ *
+ * Notably absent are booleans and null: the format has no notation for
+ * either, and Xcode models flags as the strings `"YES"` and `"NO"`.
+ */
 export type PbxprojValue = string | number | Uint8Array | PbxprojArray | PbxprojObject;
 
 /**

@@ -37,7 +37,12 @@ const NEXT_STEP_MAPPINGS: readonly number[] = [
   0x0142, 0x00f8, 0x0153, 0x00df, 0x00fe, 0x00ff, 0xfffd, 0xfffd,
 ];
 
-/** Maps an octal escape value to its Unicode code point. */
+/**
+ * Maps an octal escape value to its Unicode code point.
+ *
+ * Values below 0x80 are ASCII and pass through; values in 0x80-0xFF select
+ * from the NeXTSTEP character set.
+ */
 function nextStepToUnicode(code: number): number {
   if (code < 0x80 || code > 0xff) {
     return code;
@@ -45,10 +50,14 @@ function nextStepToUnicode(code: number): number {
   return NEXT_STEP_MAPPINGS[code - 0x80] ?? code;
 }
 
+// UTF-16 code units the escape scanner dispatches on.
 const CODE_ZERO = 0x30;
 const CODE_SEVEN = 0x37;
 const CODE_BACKSLASH = 0x5c;
 
+/**
+ * Whether the code unit is an ASCII hexadecimal digit (`0-9A-Fa-f`).
+ */
 function isHexDigit(code: number): boolean {
   return (
     (code >= 0x30 && code <= 0x39) || // 0-9
