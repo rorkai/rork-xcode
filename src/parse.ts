@@ -21,12 +21,12 @@ import type { PbxprojObject, PbxprojValue } from "./types";
  * and read `undefined`, which is correctly falsy — non-ASCII text only
  * appears inside quoted strings.
  */
-const IS_LITERAL_CHAR: boolean[] = (() => {
-  const table = Array.from({ length: 256 }, () => false);
-  for (let i = 0x61; i <= 0x7a; i++) table[i] = true; // a-z
-  for (let i = 0x41; i <= 0x5a; i++) table[i] = true; // A-Z
-  for (let i = 0x30; i <= 0x39; i++) table[i] = true; // 0-9
-  for (const ch of "_$/:.-") table[ch.charCodeAt(0)] = true;
+const IS_LITERAL_CHAR: Uint8Array = (() => {
+  const table = new Uint8Array(256);
+  for (let i = 0x61; i <= 0x7a; i++) table[i] = 1; // a-z
+  for (let i = 0x41; i <= 0x5a; i++) table[i] = 1; // A-Z
+  for (let i = 0x30; i <= 0x39; i++) table[i] = 1; // 0-9
+  for (const ch of "_$/:.-") table[ch.charCodeAt(0)] = 1;
   return table;
 })();
 
@@ -137,7 +137,7 @@ class Parser {
     const input = this.input;
     const length = input.length;
     const start = this.pos;
-    while (this.pos < length && IS_LITERAL_CHAR[input.charCodeAt(this.pos)] === true) {
+    while (this.pos < length && IS_LITERAL_CHAR[input.charCodeAt(this.pos)] === 1) {
       this.pos++;
     }
     return input.slice(start, this.pos);
@@ -213,7 +213,7 @@ class Parser {
     if (code === CODE_QUOTE || code === CODE_SINGLE_QUOTE) {
       return this.readQuotedString();
     }
-    if (IS_LITERAL_CHAR[code] === true) {
+    if (IS_LITERAL_CHAR[code] === 1) {
       return this.readLiteral();
     }
     this.fail(`Expected a key but found '${this.input[this.pos]}'`);
@@ -229,9 +229,7 @@ class Parser {
 
   parseObject(): PbxprojObject {
     this.pos++; // skip {
-    // A null prototype stores a literal __proto__ key as an own property, so
-    // parsing untrusted documents cannot pollute Object.prototype.
-    const result: PbxprojObject = Object.create(null) as PbxprojObject;
+    const result: PbxprojObject = {};
 
     for (;;) {
       const code = this.peek();
@@ -246,7 +244,14 @@ class Parser {
       this.expect(CODE_EQUALS, "=");
       const value = this.parseValue();
       this.expect(CODE_SEMICOLON, ";");
-      result[key] = value;
+      if (key === "__proto__") {
+        // A literal __proto__ key becomes an own property, so parsing
+        // untrusted documents cannot pollute Object.prototype. Ordinary keys
+        // take the fast assignment path and keep the object in shape mode.
+        Object.defineProperty(result, key, { value, writable: true, enumerable: true, configurable: true });
+      } else {
+        result[key] = value;
+      }
     }
   }
 
@@ -285,7 +290,7 @@ class Parser {
       case -1:
         this.fail("Expected a value but found end of input");
     }
-    if (IS_LITERAL_CHAR[code] === true) {
+    if (IS_LITERAL_CHAR[code] === 1) {
       return interpretLiteral(this.readLiteral());
     }
     this.fail(`Expected a value but found '${this.input[this.pos]}'`);
