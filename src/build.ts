@@ -127,7 +127,9 @@ class Writer {
         if (isBase && key === "objects") {
           this.writeObjectsSections(value, valuePath);
         } else {
-          this.writeObjectBody(value, isBase, valuePath);
+          // The base flag applies to root-level keys only; nested empty
+          // dictionaries collapse to `{}` even under a root dictionary.
+          this.writeObjectBody(value, false, valuePath);
         }
         this.indent--;
         this.line("};");

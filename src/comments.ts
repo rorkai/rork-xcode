@@ -57,6 +57,10 @@ function repoNameFromUrl(repoUrl: string): string {
  */
 export function createReferenceComments(root: PbxprojValue): Map<string, string> {
   const cache = new Map<string, string>();
+  // Ids whose comment is currently being derived. A malformed project can
+  // point build files at each other (fileRef cycles); re-entering an
+  // in-progress id must fall back instead of recursing forever.
+  const inProgress = new Set<string>();
 
   const objectsValue = isDictionary(root) ? root["objects"] : undefined;
   if (!isDictionary(objectsValue)) {
@@ -145,6 +149,10 @@ export function createReferenceComments(root: PbxprojValue): Map<string, string>
     if (isa == null) {
       return undefined;
     }
+    if (inProgress.has(id)) {
+      return undefined;
+    }
+    inProgress.add(id);
 
     let comment: string;
     if (isa === "PBXBuildFile") {
@@ -168,6 +176,7 @@ export function createReferenceComments(root: PbxprojValue): Map<string, string>
       comment = defaultName(object, isa);
     }
 
+    inProgress.delete(id);
     cache.set(id, comment);
     return comment;
   };

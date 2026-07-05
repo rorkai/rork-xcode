@@ -108,6 +108,16 @@ describe("malformed input", () => {
     expect(() => parsePbxproj("")).toThrow(PbxprojParseError);
     expect(() => parsePbxproj("plain")).toThrow(PbxprojParseError);
   });
+
+  // Apple's parser rejects both of these; being lenient would silently
+  // reshape malformed documents instead of surfacing them.
+  it("rejects array items separated by whitespace only", () => {
+    expect(() => parsePbxproj("{ items = (a b); }")).toThrow(PbxprojParseError);
+  });
+
+  it("rejects data runs with an odd number of hex digits", () => {
+    expect(() => parsePbxproj("{ data = <ABC>; }")).toThrow(PbxprojParseError);
+  });
 });
 
 test("a literal __proto__ key cannot pollute prototypes", () => {

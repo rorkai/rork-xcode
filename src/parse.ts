@@ -206,7 +206,12 @@ class Parser {
     }
     this.pos++; // skip >
 
-    const bytes = new Uint8Array(Math.ceil(hex.length / 2));
+    // Apple's parser rejects odd digit counts; padding would guess a byte.
+    if (hex.length % 2 !== 0) {
+      this.fail("Data run has an odd number of hex digits", start);
+    }
+
+    const bytes = new Uint8Array(hex.length / 2);
     for (let i = 0; i < hex.length; i += 2) {
       bytes[i >> 1] = Number.parseInt(hex.slice(i, i + 2), 16);
     }
@@ -347,8 +352,13 @@ class Parser {
         return items;
       }
       items.push(this.parseValueAtSignificant());
-      if (this.peek() === CODE_COMMA) {
+      // Items are comma-separated; accepting bare whitespace would silently
+      // merge malformed input (Apple's parser rejects it too).
+      const next = this.peek();
+      if (next === CODE_COMMA) {
         this.pos++;
+      } else if (next !== CODE_CLOSE_PAREN) {
+        this.fail(next === -1 ? "Unterminated array" : "Expected ',' or ')' after an array item");
       }
     }
   }

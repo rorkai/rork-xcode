@@ -114,6 +114,34 @@ test("remoteGlobalIDString renders without a reference comment", () => {
   expect(text).not.toContain("remoteGlobalIDString = T1 /*");
 });
 
+test("empty dictionaries nested under root-level keys still collapse to {}", () => {
+  // Only immediate root keys (like `classes`) render empty dictionaries
+  // multi-line; anything deeper uses the inline `{}` form.
+  const text = buildPbxproj({ classes: {}, extras: { empty: {} } });
+  expect(text).toContain("classes = {\n\t};");
+  expect(text).toContain("empty = {};");
+});
+
+test("cyclic build-file references terminate with a null comment", () => {
+  // Malformed projects can point build files at each other; comment
+  // derivation must fall back instead of recursing until stack overflow.
+  const text = buildPbxproj({
+    objects: {
+      B1: { isa: "PBXBuildFile", fileRef: "B2" },
+      B2: { isa: "PBXBuildFile", fileRef: "B1" },
+      P1: {
+        isa: "PBXSourcesBuildPhase",
+        buildActionMask: 2147483647,
+        files: ["B1", "B2"],
+        runOnlyForDeploymentPostprocessing: 0,
+      },
+    },
+    rootObject: "P1",
+  });
+  // The inner lookup of the cycle short-circuits to the (null) fallback.
+  expect(text).toContain("B2 /* (null) in Sources */");
+});
+
 test("rejects values the format cannot carry, naming their path", () => {
   try {
     buildPbxproj({ objects: { A1: { isa: "PBXGroup", children: [], name: null } } } as never);
