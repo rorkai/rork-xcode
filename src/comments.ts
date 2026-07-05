@@ -84,7 +84,7 @@ export function createReferenceComments(root: PbxprojValue): Map<string, string>
       const files = owner["files"];
       if (Array.isArray(files)) {
         for (const file of files) {
-          if (typeof file === "string") {
+          if (typeof file === "string" && !fileToPhase.has(file)) {
             fileToPhase.set(file, { isa, name: asString(owner["name"]) });
           }
         }

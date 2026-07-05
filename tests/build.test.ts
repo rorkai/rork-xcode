@@ -122,6 +122,20 @@ test("root-level empty dictionaries render multi-line; nested ones collapse to {
   expect(text).toContain("empty = {};");
 });
 
+test("comment text cannot terminate the comment early", () => {
+  // Comments derive from document fields; a crafted name containing `*/`
+  // must not break out of `/* ... */` and corrupt the document.
+  const text = buildPbxproj({
+    objects: {
+      F1: { isa: "PBXFileReference", name: "evil */ injected", path: "App.swift", sourceTree: "<group>" },
+      G1: { isa: "PBXGroup", children: ["F1"], name: "Group" },
+    },
+    rootObject: "G1",
+  });
+  expect(text).toContain("/* evil * / injected */");
+  expect(parsePbxproj(text)).toBeDefined();
+});
+
 test("cyclic build-file references terminate with a null comment", () => {
   // Malformed projects can point build files at each other; comment
   // derivation must fall back instead of recursing until stack overflow.

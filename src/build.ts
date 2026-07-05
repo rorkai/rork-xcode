@@ -58,6 +58,14 @@ function invalidValue(value: unknown, path: string): PbxprojBuildError {
   );
 }
 
+/**
+ * Comments derive from document fields (names, paths), so a value containing
+ * `*​/` could otherwise terminate the comment early and corrupt the output.
+ */
+function sanitizeComment(comment: string): string {
+  return comment.includes("*/") ? comment.replaceAll("*/", "* /") : comment;
+}
+
 /** Indentation strings by depth, extended on demand; avoids a `repeat` allocation per line. */
 const INDENTS: string[] = [""];
 function indentString(depth: number): string {
@@ -116,7 +124,8 @@ class Writer {
       return cached;
     }
     const comment = this.comments.get(id);
-    const rendered = comment != null && comment.length > 0 ? `${id} /* ${comment} */` : ensureQuotes(id);
+    const rendered =
+      comment != null && comment.length > 0 ? `${id} /* ${sanitizeComment(comment)} */` : ensureQuotes(id);
     this.renderedReferences.set(id, rendered);
     return rendered;
   }
@@ -212,7 +221,7 @@ class Writer {
     }
 
     for (const isa of [...byIsa.keys()].toSorted()) {
-      this.out += `\n/* Begin ${isa} section */\n`;
+      this.out += `\n/* Begin ${sanitizeComment(isa)} section */\n`;
 
       const entries = (byIsa.get(isa) ?? []).toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
 
@@ -236,7 +245,7 @@ class Writer {
         }
       }
 
-      this.out += `/* End ${isa} section */\n`;
+      this.out += `/* End ${sanitizeComment(isa)} section */\n`;
     }
   }
 

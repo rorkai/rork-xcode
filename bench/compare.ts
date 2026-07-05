@@ -43,11 +43,17 @@ const xcodeParser = require("xcode/lib/parser/pbxproj") as {
   parse(text: string): unknown;
 };
 
+/**
+ * One reusable writer instance for the xcode package, constructed outside
+ * the timed loops so its build measurements cover serialization only, like
+ * the other libraries' closures.
+ */
+const classicProject = xcodePackage.project("project.pbxproj");
+
 /** Serializes a document through the xcode package's project writer. */
 function xcodeWrite(hash: unknown): string {
-  const project = xcodePackage.project("project.pbxproj");
-  project.hash = hash;
-  return project.writeSync();
+  classicProject.hash = hash;
+  return classicProject.writeSync();
 }
 
 /** Parses a fixture and narrows the root to the dictionary every pbxproj document has. */
