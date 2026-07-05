@@ -1,9 +1,9 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { buildPbxproj, type PbxprojObject } from "../src/index";
+import { buildPbxproj, parsePbxproj, type PbxprojObject } from "../src/index";
 
 function lintWithPlutil(text: string): void {
   const dir = mkdtempSync(join(tmpdir(), "rork-xcode-"));
@@ -26,9 +26,14 @@ function lintWithPlutil(text: string): void {
  * output is acceptable to Apple tooling. Runs only where plutil exists.
  */
 describe.skipIf(process.platform !== "darwin")("plutil cross-validation", () => {
-  it("accepts every committed fixture", () => {
-    for (const name of ["app-xcode16.pbxproj", "legacy-groups.pbxproj", "app-exceptions.pbxproj"]) {
-      lintWithPlutil(readFileSync(new URL(`fixtures/${name}`, import.meta.url), "utf-8"));
+  it("accepts every committed fixture and its rebuilt form", () => {
+    const dir = new URL("fixtures/", import.meta.url);
+    const names = readdirSync(dir).filter((name) => name.endsWith(".pbxproj"));
+    expect(names.length).toBeGreaterThan(0);
+    for (const name of names) {
+      const original = readFileSync(new URL(name, dir), "utf-8");
+      lintWithPlutil(original);
+      lintWithPlutil(buildPbxproj(parsePbxproj(original) as PbxprojObject));
     }
   });
 

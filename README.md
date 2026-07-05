@@ -114,8 +114,9 @@ Measured on an Apple M5 Max, Node.js 24, single thread, with `@bacons/xcode` 1.0
 
 ## Verification
 
-- Golden-file tests assert byte-exact round-trips over real project documents, including Xcode 16 file-system-synchronized groups and both exception-set kinds.
-- On macOS, the suite cross-validates output with `plutil`, Apple's own property list parser — the empirical ground truth for what Apple tooling accepts.
+- The committed fixture corpus spans project generations from Xcode 3 to Xcode 16 — synchronized folders with both exception-set kinds, classic groups, variant groups, aggregate and legacy targets, reference proxies, build rules, Swift packages, and a ~100 KiB multiplatform framework project — captured from real projects with identifiers neutralized.
+- Documents already in current Xcode's layout must round-trip byte for byte; documents from other tool generations must normalize to a byte-stable fixed point with unchanged values.
+- On macOS, the suite cross-validates every fixture and its rebuilt form with `plutil`, Apple's own property list parser — the empirical ground truth for what Apple tooling accepts.
 - A corpus sweep (`pnpm corpus`) walks every Xcode project on the machine, verifies each one parses and reaches a byte-stable fixed point, and cross-validates a sample of parsed values against plutil's own reading.
 - CI runs the full gate on Linux and macOS, and executes the built artifact on the oldest supported Node to enforce the `engines` floor.
 

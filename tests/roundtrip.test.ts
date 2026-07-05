@@ -6,24 +6,87 @@ function fixture(name: string): string {
   return readFileSync(new URL(`fixtures/${name}`, import.meta.url), "utf-8");
 }
 
-// The fixtures are in the writer's canonical layout (the layout Xcode itself
-// writes), so a parse → build cycle must reproduce them byte for byte.
-test("app-xcode16.pbxproj round-trips byte-exact", () => {
-  const original = fixture("app-xcode16.pbxproj");
-  expect(buildPbxproj(parsePbxproj(original) as PbxprojObject)).toBe(original);
+/**
+ * Documents already in the writer's canonical layout (the layout current
+ * Xcode writes), so a parse → build cycle must reproduce them byte for byte.
+ *
+ * - app-xcode16: real app with file-system-synchronized groups.
+ * - legacy-groups: real app with classic PBXGroup file listings.
+ * - app-exceptions: generated in current Xcode's shape; synchronized folders
+ *   with both exception-set kinds, a target dependency, an embed phase, and
+ *   a remote Swift package.
+ * - framework-multiplatform: large real-world framework project (~100 KiB,
+ *   identifiers neutralized) with variant groups and per-platform targets.
+ */
+const BYTE_EXACT_FIXTURES = [
+  "app-xcode16.pbxproj",
+  "legacy-groups.pbxproj",
+  "app-exceptions.pbxproj",
+  "framework-multiplatform.pbxproj",
+];
+
+/**
+ * Documents written by other generations of tooling whose layout differs
+ * from current Xcode's (multi-line empty dictionaries, isa-only exception
+ * comments, unsectioned objects). They must normalize into the canonical
+ * layout — reaching a byte-stable fixed point with unchanged values —
+ * rather than reproduce their original bytes.
+ *
+ * - legacy-aggregate-cocoa: ancient real-world project (identifiers
+ *   neutralized) with aggregate and legacy targets, reference proxies into
+ *   a subproject, variant groups, and build rules.
+ * - sync-groups-xcode16: real Xcode 16.0 app (identifiers neutralized)
+ *   whose exception sets carry the older isa-only comments.
+ * - number-fidelity: scalar torture document (0.0, 1.1, 1.0, "1.0", 1.10,
+ *   01) in an unsectioned layout.
+ */
+const NORMALIZING_FIXTURES = [
+  "legacy-aggregate-cocoa.pbxproj",
+  "sync-groups-xcode16.pbxproj",
+  "number-fidelity.pbxproj",
+];
+
+describe.each(BYTE_EXACT_FIXTURES)("%s", (name) => {
+  it("round-trips byte-exact", () => {
+    const original = fixture(name);
+    expect(buildPbxproj(parsePbxproj(original) as PbxprojObject)).toBe(original);
+  });
 });
 
-test("legacy-groups.pbxproj round-trips byte-exact", () => {
-  const original = fixture("legacy-groups.pbxproj");
-  expect(buildPbxproj(parsePbxproj(original) as PbxprojObject)).toBe(original);
+describe.each(NORMALIZING_FIXTURES)("%s", (name) => {
+  it("normalizes to a fixed point with unchanged values", () => {
+    const original = fixture(name);
+    const document = parsePbxproj(original);
+    const rebuilt = buildPbxproj(document as PbxprojObject);
+
+    // One build reaches the canonical form; another cycle must not move.
+    expect(buildPbxproj(parsePbxproj(rebuilt) as PbxprojObject)).toBe(rebuilt);
+
+    // Normalization changes layout only; every value survives (toEqual
+    // compares dictionaries without regard to key order).
+    expect(parsePbxproj(rebuilt)).toEqual(document);
+  });
 });
 
-// Generated in the shape current Xcode writes (validated with plutil):
-// synchronized folders with both exception-set kinds, a target dependency,
-// an embed phase, and a remote Swift package.
-test("app-exceptions.pbxproj round-trips byte-exact", () => {
-  const original = fixture("app-exceptions.pbxproj");
-  expect(buildPbxproj(parsePbxproj(original) as PbxprojObject)).toBe(original);
+test("number-fidelity preserves each scalar's lexical form", () => {
+  const document = parsePbxproj(fixture("number-fidelity.pbxproj")) as PbxprojObject;
+  const objects = document["objects"] as Record<string, PbxprojObject>;
+  const project = objects["123456789123456789012345"];
+  assert(project);
+  // Trailing-zero decimals and leading-zero runs stay strings; plain
+  // decimals become numbers; quoting always forces a string.
+  expect(project["one"]).toBe("0.0");
+  expect(project["two"]).toBe(1.1);
+  expect(project["three"]).toBe("1.0");
+  expect(project["four"]).toBe("1.0");
+  expect(project["five"]).toBe("1.10");
+  expect(project["six"]).toBe("01");
+});
+
+test("older isa-only exception comments upgrade to the current form", () => {
+  const rebuilt = buildPbxproj(parsePbxproj(fixture("sync-groups-xcode16.pbxproj")) as PbxprojObject);
+  expect(rebuilt).toContain('/* Exceptions for "Views" folder in "ScoreBoard" target */');
+  expect(rebuilt).not.toContain("/* PBXFileSystemSynchronizedBuildFileExceptionSet */");
 });
 
 test("quoting style differences normalize to a stable document", () => {
