@@ -50,6 +50,15 @@ function xcodeWrite(hash: unknown): string {
   return project.writeSync();
 }
 
+/** Parses a fixture and narrows the root to the dictionary every pbxproj document has. */
+function parseDocument(text: string): PbxprojObject {
+  const document = parsePbxproj(text);
+  if (typeof document !== "object" || document === null || Array.isArray(document) || document instanceof Uint8Array) {
+    throw new Error("fixture root is not a dictionary");
+  }
+  return document;
+}
+
 /** Deterministic 24-hex-digit ids in the style Xcode generates. */
 const id = (n: number): string => `AA${n.toString(16).toUpperCase().padStart(20, "0")}BB`;
 
@@ -252,8 +261,8 @@ const summary = new Map<string, number[]>();
 for (const [name, text] of Object.entries(fixtures)) {
   // Every library must survive parse → build → parse on the fixture before
   // being timed on it.
-  const ours = parsePbxproj(text);
-  if (buildPbxproj(parsePbxproj(buildPbxproj(ours))) !== buildPbxproj(ours)) {
+  const ours = parseDocument(text);
+  if (buildPbxproj(parseDocument(buildPbxproj(ours))) !== buildPbxproj(ours)) {
     throw new Error(`rork-xcode round-trip is unstable on ${name}`);
   }
   const bacons = baconsJson.parse(text);
