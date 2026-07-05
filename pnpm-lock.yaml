@@ -26,6 +26,9 @@ importers:
       oxlint:
         specifier: 1.72.0
         version: 1.72.0
+      rork-plist:
+        specifier: ^0.3.0
+        version: 0.3.0
       tsdown:
         specifier: ^0.22.3
         version: 0.22.3(typescript@6.0.3)
@@ -1151,6 +1154,10 @@ packages:
     resolution: {integrity: sha512-IjZYiLxZwpnhwhdBH2ugdTGVSdhCQUmLxLoqyjiL0JxYjyRst+5a0P3xfrTxJ5F638j4Mvvw5FAX5XE6eHpXbA==}
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
+
+  rork-plist@0.3.0:
+    resolution: {integrity: sha512-/JPVul4cgmyaLUkgrB4cXf3oD+Ts1QVjOhKoqdc5CjDxr26en8B4rNxozvI0DhYQ/LokcpZG7hh75QNKi1zeiQ==}
+    engines: {node: '>=20'}
 
   run-parallel@1.2.0:
     resolution: {integrity: sha512-5l4VyZR86LZ/lDxZTR6jqL8AFE2S0IFLMP26AbjsLVADxHdhB/c0GUsH+y39UfCi3dzz8OlQuPmnaJOMoDHQBA==}
@@ -2361,6 +2368,8 @@ snapshots:
       '@rolldown/binding-wasm32-wasi': 1.1.4
       '@rolldown/binding-win32-arm64-msvc': 1.1.4
       '@rolldown/binding-win32-x64-msvc': 1.1.4
+
+  rork-plist@0.3.0: {}
 
   run-parallel@1.2.0:
     dependencies:

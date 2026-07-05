@@ -18,6 +18,14 @@ test("legacy-groups.pbxproj round-trips byte-exact", () => {
   expect(buildPbxproj(parsePbxproj(original) as PbxprojObject)).toBe(original);
 });
 
+// Generated in the shape current Xcode writes (validated with plutil):
+// synchronized folders with both exception-set kinds, a target dependency,
+// an embed phase, and a remote Swift package.
+test("app-exceptions.pbxproj round-trips byte-exact", () => {
+  const original = fixture("app-exceptions.pbxproj");
+  expect(buildPbxproj(parsePbxproj(original) as PbxprojObject)).toBe(original);
+});
+
 test("quoting style differences normalize to a stable document", () => {
   // Over-quoted input (tools may quote more aggressively than Xcode) parses
   // to the same values and re-serializes in canonical quoting.

@@ -69,7 +69,7 @@ try {
 
 ### `buildPbxproj(root)`
 
-Serializes a document back to pbxproj text. The input is the same shape `parsePbxproj` produces; any dictionary works, and documents carrying a root-level `objects` dictionary get the full Xcode layout treatment: sections grouped by `isa` and sorted, entries sorted by identifier, reference comments derived from the object graph, and version-like build settings (`SWIFT_VERSION = 5.0`) rendered with their trailing zero.
+Serializes a document back to pbxproj text. The input is the same shape `parsePbxproj` produces; any dictionary works, and documents carrying a root-level `objects` dictionary get the full Xcode layout treatment: sections grouped by `isa` and sorted, entries sorted by identifier, and reference comments derived from the object graph. Version-like build settings (`SWIFT_VERSION = 5.0`) arrive from the parser as strings and round-trip verbatim.
 
 ```ts
 import { buildPbxproj, PbxprojBuildError } from "rork-xcode";
@@ -114,8 +114,9 @@ Measured on an Apple M5 Max, Node.js 24, single thread, with `@bacons/xcode` 1.0
 
 ## Verification
 
-- Golden-file tests assert byte-exact round-trips over real project documents, including Xcode 16 file-system-synchronized groups.
+- Golden-file tests assert byte-exact round-trips over real project documents, including Xcode 16 file-system-synchronized groups and both exception-set kinds.
 - On macOS, the suite cross-validates output with `plutil`, Apple's own property list parser — the empirical ground truth for what Apple tooling accepts.
+- A corpus sweep (`pnpm corpus`) walks every Xcode project on the machine, verifies each one parses and reaches a byte-stable fixed point, and cross-validates a sample of parsed values against plutil's own reading.
 - CI runs the full gate on Linux and macOS, and executes the built artifact on the oldest supported Node to enforce the `engines` floor.
 
 ## License

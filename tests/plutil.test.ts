@@ -26,8 +26,8 @@ function lintWithPlutil(text: string): void {
  * output is acceptable to Apple tooling. Runs only where plutil exists.
  */
 describe.skipIf(process.platform !== "darwin")("plutil cross-validation", () => {
-  it("accepts both committed fixtures", () => {
-    for (const name of ["app-xcode16.pbxproj", "legacy-groups.pbxproj"]) {
+  it("accepts every committed fixture", () => {
+    for (const name of ["app-xcode16.pbxproj", "legacy-groups.pbxproj", "app-exceptions.pbxproj"]) {
       lintWithPlutil(readFileSync(new URL(`fixtures/${name}`, import.meta.url), "utf-8"));
     }
   });

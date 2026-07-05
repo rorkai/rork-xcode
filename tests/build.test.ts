@@ -30,19 +30,29 @@ test("escapes control characters and quotes inside quoted strings", () => {
   expect(text).toContain(String.raw`script = "echo \"hi\"\nexit 0\n";`);
 });
 
-test("renders version-like build settings with a trailing .0 when integral", () => {
+test("numbers render verbatim; version-like settings stay strings end to end", () => {
+  // Xcode writes SWIFT_VERSION = 5.0, which the parser deliberately keeps as
+  // the string "5.0"; a document carrying the bare integer 5 (they exist in
+  // the wild) must not be rewritten to 5.0 either. Fidelity in both cases
+  // falls out of rendering numbers exactly as provided.
   const text = buildPbxproj({
-    SWIFT_VERSION: 5,
-    MARKETING_VERSION: 1,
-    IPHONEOS_DEPLOYMENT_TARGET: 18,
+    SWIFT_VERSION: "5.0",
+    MARKETING_VERSION: 5,
     buildActionMask: 2147483647,
     dstSubfolderSpec: 13,
   });
   expect(text).toContain("SWIFT_VERSION = 5.0;");
-  expect(text).toContain("MARKETING_VERSION = 1.0;");
-  expect(text).toContain("IPHONEOS_DEPLOYMENT_TARGET = 18.0;");
+  expect(text).toContain("MARKETING_VERSION = 5;");
   expect(text).toContain("buildActionMask = 2147483647;");
   expect(text).toContain("dstSubfolderSpec = 13;");
+
+  const cycled = parsePbxproj(text);
+  expect(cycled).toEqual({
+    SWIFT_VERSION: "5.0",
+    MARKETING_VERSION: 5,
+    buildActionMask: 2147483647,
+    dstSubfolderSpec: 13,
+  });
 });
 
 test("renders data values as uppercase hex runs", () => {
@@ -134,6 +144,56 @@ test("comment text cannot terminate the comment early", () => {
   });
   expect(text).toContain("/* evil * / injected */");
   expect(parsePbxproj(text)).toBeDefined();
+});
+
+test("exception sets and target dependencies use Xcode's comment forms", () => {
+  // Current Xcode annotates exception sets with their folder and target (or
+  // phase), and always renders PBXTargetDependency as its isa even when the
+  // object carries a name.
+  const text = buildPbxproj({
+    objects: {
+      E1: {
+        isa: "PBXFileSystemSynchronizedBuildFileExceptionSet",
+        membershipExceptions: ["Info.plist"],
+        target: "T1",
+      },
+      E2: {
+        isa: "PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet",
+        buildPhase: "P1",
+        membershipExceptions: ["com.example.point"],
+      },
+      G1: {
+        isa: "PBXFileSystemSynchronizedRootGroup",
+        exceptions: ["E1", "E2"],
+        path: "Sources",
+        sourceTree: "<group>",
+      },
+      P1: {
+        isa: "PBXCopyFilesBuildPhase",
+        buildActionMask: 2147483647,
+        dstPath: "",
+        dstSubfolderSpec: 13,
+        files: [],
+        name: "Embed Extensions",
+        runOnlyForDeploymentPostprocessing: 0,
+      },
+      T1: {
+        isa: "PBXNativeTarget",
+        buildConfigurationList: "",
+        buildPhases: ["P1"],
+        buildRules: [],
+        dependencies: ["D1"],
+        name: "App",
+        productType: "com.apple.product-type.application",
+      },
+      D1: { isa: "PBXTargetDependency", name: "App", target: "T1" },
+    },
+    rootObject: "T1",
+  });
+  expect(text).toContain('E1 /* Exceptions for "Sources" folder in "App" target */');
+  expect(text).toContain('E2 /* Exceptions for "Sources" folder in "Embed Extensions" phase from "App" target */');
+  expect(text).toContain("D1 /* PBXTargetDependency */");
+  expect(text).not.toContain("D1 /* App */");
 });
 
 test("cyclic build-file references terminate with a null comment", () => {

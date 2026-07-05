@@ -46,6 +46,7 @@
     "format:check": "oxfmt --check .",
     "checks": "pnpm build && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
     "bench:compare": "pnpm build && node bench/compare.ts",
+    "corpus": "pnpm build && node bench/corpus.ts",
     "prepublishOnly": "pnpm checks"
   },
   "devDependencies": {
@@ -55,6 +56,7 @@
     "eslint-plugin-perfectionist": "5.9.1",
     "oxfmt": "0.57.0",
     "oxlint": "1.72.0",
+    "rork-plist": "^0.3.0",
     "tsdown": "^0.22.3",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9",

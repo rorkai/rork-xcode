@@ -9,9 +9,12 @@
  *   blocks, sections ordered by isa and entries ordered by uuid;
  * - `PBXBuildFile` and `PBXFileReference` entries rendered on a single line;
  * - reference comments (`13B07F86… /* AppDelegate.swift in Sources *​/`)
- *   derived from the object graph;
- * - build settings whose keys end in `SWIFT_VERSION`, `MARKETING_VERSION`,
- *   or `_DEPLOYMENT_TARGET` rendered with a trailing `.0` when integral.
+ *   derived from the object graph.
+ *
+ * Numbers render exactly as JavaScript formats them; the version-like
+ * settings Xcode writes with a trailing zero (`SWIFT_VERSION = 5.0`) arrive
+ * from the parser as strings and round-trip verbatim, so no reformatting
+ * heuristic is needed or applied.
  *
  * @module
  */
@@ -23,36 +26,6 @@ import type { PbxprojObject, PbxprojValue } from "./types";
 
 /** The encoding marker Xcode writes on the first line of every document. */
 const SHEBANG = "// !$*UTF8*$!";
-
-/**
- * Whether a build-setting key takes float-formatted integral values.
- *
- * Xcode writes some settings with a trailing `.0` (`SWIFT_VERSION = 5.0;`),
- * so integers under these keys must render the same way to survive
- * round-trips. The all-uppercase guard keeps ordinary lowercase keys like
- * `name` out of the heuristic.
- */
-function keyHasFloatValue(key: string): boolean {
-  for (let i = 0; i < key.length; i++) {
-    const code = key.charCodeAt(i);
-    if (code >= 0x61 && code <= 0x7a) {
-      return false;
-    }
-  }
-  return key.endsWith("SWIFT_VERSION") || key.endsWith("MARKETING_VERSION") || key.endsWith("_DEPLOYMENT_TARGET");
-}
-
-/**
- * Renders a finite number, applying the trailing-`.0` rule for float-valued
- * build-setting keys. The caller has already rejected non-finite values
- * with the value's path.
- */
-function formatNumber(value: number, key: string): string {
-  if (Number.isInteger(value) && keyHasFloatValue(key)) {
-    return `${value}.0`;
-  }
-  return String(value);
-}
 
 /**
  * Creates the error for a `NaN` or infinite number at the given value path.
@@ -249,7 +222,7 @@ class Writer {
         this.out += indentString(this.indent);
         this.out += this.renderKey(key);
         this.out += " = ";
-        this.out += formatNumber(value, key);
+        this.out += String(value);
         this.out += ";\n";
       } else if (value instanceof Uint8Array) {
         this.writeLine(`${this.renderKey(key)} = ${formatData(value)};`);
@@ -344,7 +317,7 @@ class Writer {
         if (!Number.isFinite(value)) {
           throw nonFiniteNumber(value, `${path}.${innerKey}`);
         }
-        text += `${this.renderKey(innerKey)} = ${formatNumber(value, innerKey)}; `;
+        text += `${this.renderKey(innerKey)} = ${String(value)}; `;
       } else if (value instanceof Uint8Array) {
         text += `${this.renderKey(innerKey)} = ${formatData(value)}; `;
       } else if (Array.isArray(value)) {
@@ -354,7 +327,7 @@ class Writer {
           if (typeof item === "string") {
             text += `${ensureQuotes(item)}, `;
           } else if (typeof item === "number" && Number.isFinite(item)) {
-            text += `${formatNumber(item, "")}, `;
+            text += `${String(item)}, `;
           } else {
             throw typeof item === "number"
               ? nonFiniteNumber(item, `${path}.${innerKey}[${index}]`)
@@ -391,7 +364,7 @@ class Writer {
         if (!Number.isFinite(item)) {
           throw nonFiniteNumber(item, `${path}[${index}]`);
         }
-        this.writeLine(`${formatNumber(item, "")},`);
+        this.writeLine(`${String(item)},`);
       } else if (item instanceof Uint8Array) {
         this.writeLine(`${formatData(item)},`);
       } else if (isDictionary(item)) {

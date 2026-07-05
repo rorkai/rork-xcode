@@ -104,6 +104,8 @@ export function createReferenceComments(root: PbxprojValue): Map<string, string>
   const fileToPhase = new Map<string, PhaseInfo>();
   const configurationListOwners = new Map<string, [id: string, owner: PbxprojObject]>();
   const proxyRemoteInfoByPortal = new Map<string, string>();
+  const syncGroupByExceptionSet = new Map<string, PbxprojObject>();
+  const targetByBuildPhase = new Map<string, PbxprojObject>();
   for (const ownerId of Object.keys(objects)) {
     const owner = objects[ownerId];
     if (!isDictionary(owner)) continue;
@@ -126,6 +128,25 @@ export function createReferenceComments(root: PbxprojValue): Map<string, string>
       }
     }
 
+    // File-system-synchronized groups list their exception sets, and targets
+    // list their build phases; both indexes serve the exception-set comments.
+    const exceptions = owner["exceptions"];
+    if (Array.isArray(exceptions)) {
+      for (const exceptionId of exceptions) {
+        if (typeof exceptionId === "string" && !syncGroupByExceptionSet.has(exceptionId)) {
+          syncGroupByExceptionSet.set(exceptionId, owner);
+        }
+      }
+    }
+    const buildPhases = owner["buildPhases"];
+    if (Array.isArray(buildPhases)) {
+      for (const phaseId of buildPhases) {
+        if (typeof phaseId === "string" && !targetByBuildPhase.has(phaseId)) {
+          targetByBuildPhase.set(phaseId, owner);
+        }
+      }
+    }
+
     const listId = asString(owner["buildConfigurationList"]);
     if (listId != null && !configurationListOwners.has(listId)) {
       configurationListOwners.set(listId, [ownerId, owner]);
@@ -138,6 +159,57 @@ export function createReferenceComments(root: PbxprojValue): Map<string, string>
    */
   const defaultName = (object: PbxprojObject, isa: string): string =>
     asString(object["name"]) ?? asString(object["productName"]) ?? asString(object["path"]) ?? isa;
+
+  /**
+   * The display name of the synchronized folder an exception set belongs
+   * to, found through the sync group whose `exceptions` array lists it.
+   */
+  const exceptionSetFolderName = (id: string): string | undefined => {
+    const group = syncGroupByExceptionSet.get(id);
+    return group == null ? undefined : (asString(group["name"]) ?? asString(group["path"]));
+  };
+
+  /**
+   * Comment for a `PBXFileSystemSynchronizedBuildFileExceptionSet`,
+   * matching current Xcode: `Exceptions for "clip" folder in "clip"
+   * target`. Falls back to the isa when the folder or target cannot be
+   * resolved (older documents and hand-edited graphs).
+   */
+  const buildFileExceptionSetComment = (id: string, set: PbxprojObject): string | undefined => {
+    const folder = exceptionSetFolderName(id);
+    const targetId = asString(set["target"]);
+    const target = targetId == null ? undefined : objects[targetId];
+    if (folder == null || !isDictionary(target)) {
+      return undefined;
+    }
+    const targetName = asString(target["name"]) ?? asString(target["productName"]) ?? asString(target["path"]);
+    return targetName == null ? undefined : `Exceptions for "${folder}" folder in "${targetName}" target`;
+  };
+
+  /**
+   * Comment for a `PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet`,
+   * matching current Xcode: `Exceptions for "Tophat" folder in "CopyFiles"
+   * phase from "Tophat" target`. Falls back to the isa when any of the
+   * three names cannot be resolved.
+   */
+  const membershipExceptionSetComment = (id: string, set: PbxprojObject): string | undefined => {
+    const folder = exceptionSetFolderName(id);
+    const phaseId = asString(set["buildPhase"]);
+    const phase = phaseId == null ? undefined : objects[phaseId];
+    if (folder == null || phaseId == null || !isDictionary(phase)) {
+      return undefined;
+    }
+    const phaseName = asString(phase["name"]) ?? defaultBuildPhaseName(asString(phase["isa"]) ?? "");
+    const target = targetByBuildPhase.get(phaseId);
+    const targetName =
+      target == null
+        ? undefined
+        : (asString(target["name"]) ?? asString(target["productName"]) ?? asString(target["path"]));
+    if (phaseName == null || targetName == null) {
+      return undefined;
+    }
+    return `Exceptions for "${folder}" folder in "${phaseName}" phase from "${targetName}" target`;
+  };
 
   /**
    * Comment for a `PBXBuildFile`: the referenced file's own comment plus
@@ -224,6 +296,14 @@ export function createReferenceComments(root: PbxprojValue): Map<string, string>
       comment = relativePath == null ? isa : `${isa} "${relativePath}"`;
     } else if (isa === "PBXProject") {
       comment = "Project object";
+    } else if (isa === "PBXFileSystemSynchronizedBuildFileExceptionSet") {
+      comment = buildFileExceptionSetComment(id, object) ?? isa;
+    } else if (isa === "PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet") {
+      comment = membershipExceptionSetComment(id, object) ?? isa;
+    } else if (isa === "PBXTargetDependency") {
+      // Xcode always renders dependencies as their isa, even when they
+      // carry a name field.
+      comment = isa;
     } else if (isa.endsWith("BuildPhase")) {
       comment = asString(object["name"]) ?? defaultBuildPhaseName(isa) ?? "";
     } else if (isa === "PBXGroup" && asString(object["name"]) == null && asString(object["path"]) == null) {
