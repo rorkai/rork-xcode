@@ -39,7 +39,6 @@ const CODE_SINGLE_QUOTE = 0x27;
 const CODE_OPEN_PAREN = 0x28;
 const CODE_CLOSE_PAREN = 0x29;
 const CODE_ASTERISK = 0x2a;
-const CODE_PLUS = 0x2b;
 const CODE_COMMA = 0x2c;
 const CODE_MINUS = 0x2d;
 const CODE_DOT = 0x2e;
@@ -54,16 +53,22 @@ const CODE_BACKSLASH = 0x5c;
 const CODE_OPEN_BRACE = 0x7b;
 const CODE_CLOSE_BRACE = 0x7d;
 
+/** Whitespace classification as a table read — the single hottest check in the scanner. */
+const IS_WHITESPACE: Uint8Array = (() => {
+  const table = new Uint8Array(256);
+  table[CODE_SPACE] = 1;
+  table[CODE_TAB] = 1;
+  table[CODE_CARRIAGE_RETURN] = 1;
+  table[CODE_LINE_FEED] = 1;
+  return table;
+})();
+
 function isDigit(code: number): boolean {
   return code >= CODE_ZERO && code <= CODE_NINE;
 }
 
 function isHexDigit(code: number): boolean {
   return isDigit(code) || (code >= 0x41 && code <= 0x46) || (code >= 0x61 && code <= 0x66);
-}
-
-function isWhitespace(code: number): boolean {
-  return code === CODE_SPACE || code === CODE_TAB || code === CODE_CARRIAGE_RETURN || code === CODE_LINE_FEED;
 }
 
 class Parser {
@@ -82,38 +87,41 @@ class Parser {
   skipTrivia(): void {
     const input = this.input;
     const length = input.length;
+    let pos = this.pos;
 
     for (;;) {
-      while (this.pos < length && isWhitespace(input.charCodeAt(this.pos))) {
-        this.pos++;
+      while (pos < length && IS_WHITESPACE[input.charCodeAt(pos)] === 1) {
+        pos++;
       }
 
-      if (this.pos >= length) return;
+      if (pos >= length) break;
 
-      if (input.charCodeAt(this.pos) === CODE_SLASH && this.pos + 1 < length) {
-        const next = input.charCodeAt(this.pos + 1);
+      if (input.charCodeAt(pos) === CODE_SLASH && pos + 1 < length) {
+        const next = input.charCodeAt(pos + 1);
         if (next === CODE_SLASH) {
-          this.pos += 2;
-          while (this.pos < length && input.charCodeAt(this.pos) !== CODE_LINE_FEED) {
-            this.pos++;
+          pos += 2;
+          while (pos < length && input.charCodeAt(pos) !== CODE_LINE_FEED) {
+            pos++;
           }
           continue;
         }
         if (next === CODE_ASTERISK) {
-          this.pos += 2;
-          while (this.pos + 1 < length) {
-            if (input.charCodeAt(this.pos) === CODE_ASTERISK && input.charCodeAt(this.pos + 1) === CODE_SLASH) {
-              this.pos += 2;
+          pos += 2;
+          while (pos + 1 < length) {
+            if (input.charCodeAt(pos) === CODE_ASTERISK && input.charCodeAt(pos + 1) === CODE_SLASH) {
+              pos += 2;
               break;
             }
-            this.pos++;
+            pos++;
           }
           continue;
         }
       }
 
-      return;
+      break;
     }
+
+    this.pos = pos;
   }
 
   /** The next significant code unit, or -1 at end of input. */
@@ -137,10 +145,12 @@ class Parser {
     const input = this.input;
     const length = input.length;
     const start = this.pos;
-    while (this.pos < length && IS_LITERAL_CHAR[input.charCodeAt(this.pos)] === 1) {
-      this.pos++;
+    let pos = start;
+    while (pos < length && IS_LITERAL_CHAR[input.charCodeAt(pos)] === 1) {
+      pos++;
     }
-    return input.slice(start, this.pos);
+    this.pos = pos;
+    return input.slice(start, pos);
   }
 
   /** Reads a quoted string; the opening quote is at the current position. */
@@ -190,7 +200,7 @@ class Parser {
       const code = input.charCodeAt(i);
       if (isHexDigit(code)) {
         hex += input[i];
-      } else if (!isWhitespace(code)) {
+      } else if (IS_WHITESPACE[code] !== 1) {
         this.fail(`Invalid character '${input[i]}' in data run`, i);
       }
     }
@@ -203,20 +213,73 @@ class Parser {
     return bytes;
   }
 
-  /** Reads a dictionary key: a quoted or unquoted string. */
-  readKey(): string {
-    this.skipTrivia();
-    if (this.pos >= this.input.length) {
-      this.fail("Expected a key but found end of input");
+  /**
+   * Reads an unquoted literal value, classifying it as number or string in
+   * the same scan. Projects are dominated by 24-character identifiers that
+   * start with a digit, so a separate classification pass would re-scan
+   * almost every reference in the document.
+   *
+   * See the module documentation of `types.ts` for the exact policy and the
+   * reasoning behind the string preservations (leading zeros, trailing-zero
+   * decimals, unsafe integers).
+   */
+  readLiteralValue(): PbxprojValue {
+    const input = this.input;
+    const length = input.length;
+    const start = this.pos;
+
+    // A leading '-' is the only position where a sign reads as numeric.
+    const leadingSign = input.charCodeAt(start) === CODE_MINUS;
+
+    let digits = 0;
+    let dots = 0;
+    let others = leadingSign ? -1 : 0; // discount the sign itself
+    let pos = start;
+    let lastCode = 0;
+    while (pos < length) {
+      const code = input.charCodeAt(pos);
+      if (IS_LITERAL_CHAR[code] !== 1) break;
+      if (code >= CODE_ZERO && code <= CODE_NINE) {
+        digits++;
+      } else if (code === CODE_DOT) {
+        dots++;
+      } else {
+        others++;
+      }
+      lastCode = code;
+      pos++;
     }
-    const code = this.input.charCodeAt(this.pos);
-    if (code === CODE_QUOTE || code === CODE_SINGLE_QUOTE) {
-      return this.readQuotedString();
+    this.pos = pos;
+    const runLength = pos - start;
+    const literal = input.slice(start, pos);
+
+    if (others !== 0 || digits === 0) {
+      return literal;
     }
-    if (IS_LITERAL_CHAR[code] === 1) {
-      return this.readLiteral();
+
+    if (dots === 0 && !leadingSign) {
+      // Pure digit run. Leading zeros carry meaning (file modes, padded
+      // ids); a too-large run cannot survive the trip through a double.
+      if (runLength === 1) {
+        return input.charCodeAt(start) - CODE_ZERO;
+      }
+      if (input.charCodeAt(start) === CODE_ZERO) {
+        return literal;
+      }
+      const value = Number(literal);
+      return value <= Number.MAX_SAFE_INTEGER ? value : literal;
     }
-    this.fail(`Expected a key but found '${this.input[this.pos]}'`);
+
+    if (dots === 1) {
+      // Decimal with digit-only halves. Trailing-zero decimals stay strings
+      // to survive round-trips.
+      if (lastCode === CODE_ZERO) {
+        return literal;
+      }
+      return Number(literal);
+    }
+
+    return literal;
   }
 
   parseDocument(): PbxprojValue {
@@ -228,22 +291,35 @@ class Parser {
   }
 
   parseObject(): PbxprojObject {
+    const input = this.input;
+    const length = input.length;
     this.pos++; // skip {
     const result: PbxprojObject = {};
 
     for (;;) {
-      const code = this.peek();
+      this.skipTrivia();
+      if (this.pos >= length) {
+        this.fail("Unterminated dictionary");
+      }
+      const code = input.charCodeAt(this.pos);
       if (code === CODE_CLOSE_BRACE) {
         this.pos++;
         return result;
       }
-      if (code === -1) {
-        this.fail("Unterminated dictionary");
+
+      let key: string;
+      if (code === CODE_QUOTE || code === CODE_SINGLE_QUOTE) {
+        key = this.readQuotedString();
+      } else if (IS_LITERAL_CHAR[code] === 1) {
+        key = this.readLiteral();
+      } else {
+        this.fail(`Expected a key but found '${input[this.pos]}'`);
       }
-      const key = this.readKey();
+
       this.expect(CODE_EQUALS, "=");
       const value = this.parseValue();
       this.expect(CODE_SEMICOLON, ";");
+
       if (key === "__proto__") {
         // A literal __proto__ key becomes an own property, so parsing
         // untrusted documents cannot pollute Object.prototype. Ordinary keys
@@ -256,19 +332,21 @@ class Parser {
   }
 
   parseArray(): PbxprojValue[] {
+    const input = this.input;
+    const length = input.length;
     this.pos++; // skip (
     const items: PbxprojValue[] = [];
 
     for (;;) {
-      const code = this.peek();
-      if (code === CODE_CLOSE_PAREN) {
+      this.skipTrivia();
+      if (this.pos >= length) {
+        this.fail("Unterminated array");
+      }
+      if (input.charCodeAt(this.pos) === CODE_CLOSE_PAREN) {
         this.pos++;
         return items;
       }
-      if (code === -1) {
-        this.fail("Unterminated array");
-      }
-      items.push(this.parseValue());
+      items.push(this.parseValueAtSignificant());
       if (this.peek() === CODE_COMMA) {
         this.pos++;
       }
@@ -276,98 +354,23 @@ class Parser {
   }
 
   parseValue(): PbxprojValue {
-    const code = this.peek();
-    switch (code) {
-      case CODE_OPEN_BRACE:
-        return this.parseObject();
-      case CODE_OPEN_PAREN:
-        return this.parseArray();
-      case CODE_LESS_THAN:
-        return this.readData();
-      case CODE_QUOTE:
-      case CODE_SINGLE_QUOTE:
-        return this.readQuotedString();
-      case -1:
-        this.fail("Expected a value but found end of input");
+    this.skipTrivia();
+    if (this.pos >= this.input.length) {
+      this.fail("Expected a value but found end of input");
     }
-    if (IS_LITERAL_CHAR[code] === 1) {
-      return interpretLiteral(this.readLiteral());
-    }
+    return this.parseValueAtSignificant();
+  }
+
+  /** Dispatches on the current character; the caller has skipped trivia and checked bounds. */
+  parseValueAtSignificant(): PbxprojValue {
+    const code = this.input.charCodeAt(this.pos);
+    if (code === CODE_OPEN_BRACE) return this.parseObject();
+    if (code === CODE_OPEN_PAREN) return this.parseArray();
+    if (code === CODE_QUOTE || code === CODE_SINGLE_QUOTE) return this.readQuotedString();
+    if (IS_LITERAL_CHAR[code] === 1) return this.readLiteralValue();
+    if (code === CODE_LESS_THAN) return this.readData();
     this.fail(`Expected a value but found '${this.input[this.pos]}'`);
   }
-}
-
-/**
- * Decides whether an unquoted literal is a number or a string.
- *
- * See the module documentation of `types.ts` for the exact policy and the
- * reasoning behind the string preservations (leading zeros, trailing-zero
- * decimals, unsafe integers).
- */
-function interpretLiteral(literal: string): PbxprojValue {
-  if (literal.length === 0) {
-    return literal;
-  }
-
-  const first = literal.charCodeAt(0);
-
-  // Fast path: anything not starting with a digit, sign, or dot is a plain
-  // string — identifiers, uuids, and paths, i.e. the vast majority of values.
-  if (!isDigit(first) && first !== CODE_PLUS && first !== CODE_MINUS && first !== CODE_DOT) {
-    return literal;
-  }
-
-  if (isDigit(first)) {
-    if (literal.length === 1) {
-      return first - CODE_ZERO;
-    }
-    let allDigits = true;
-    for (let i = 1; i < literal.length; i++) {
-      if (!isDigit(literal.charCodeAt(i))) {
-        allDigits = false;
-        break;
-      }
-    }
-    if (allDigits) {
-      // Leading zeros carry meaning (file modes, padded ids); a too-large
-      // digit run cannot survive the trip through a double.
-      if (first === CODE_ZERO) {
-        return literal;
-      }
-      const value = Number(literal);
-      return value <= Number.MAX_SAFE_INTEGER ? value : literal;
-    }
-  }
-
-  // Decimal check: a single dot with digit-only halves, at least one of them
-  // non-empty. Trailing-zero decimals stay strings to survive round-trips.
-  const unsigned = first === CODE_PLUS || first === CODE_MINUS ? literal.slice(1) : literal;
-  const dot = unsigned.indexOf(".");
-  if (dot !== -1) {
-    const integerPart = unsigned.slice(0, dot);
-    const fractionPart = unsigned.slice(dot + 1);
-    const digitsOnly = (part: string): boolean => {
-      for (let i = 0; i < part.length; i++) {
-        if (!isDigit(part.charCodeAt(i))) return false;
-      }
-      return true;
-    };
-    if (
-      digitsOnly(integerPart) &&
-      digitsOnly(fractionPart) &&
-      !(integerPart.length === 0 && fractionPart.length === 0)
-    ) {
-      if (literal.endsWith("0")) {
-        return literal;
-      }
-      const value = Number(literal);
-      if (!Number.isNaN(value)) {
-        return value;
-      }
-    }
-  }
-
-  return literal;
 }
 
 /**
