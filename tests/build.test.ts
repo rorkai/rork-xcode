@@ -114,7 +114,7 @@ test("remoteGlobalIDString renders without a reference comment", () => {
   expect(text).not.toContain("remoteGlobalIDString = T1 /*");
 });
 
-test("empty dictionaries nested under root-level keys still collapse to {}", () => {
+test("root-level empty dictionaries render multi-line; nested ones collapse to {}", () => {
   // Only immediate root keys (like `classes`) render empty dictionaries
   // multi-line; anything deeper uses the inline `{}` form.
   const text = buildPbxproj({ classes: {}, extras: { empty: {} } });
