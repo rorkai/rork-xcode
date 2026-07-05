@@ -38,14 +38,16 @@ function keyHasFloatValue(key: string): boolean {
   return key.endsWith("SWIFT_VERSION") || key.endsWith("MARKETING_VERSION") || key.endsWith("_DEPLOYMENT_TARGET");
 }
 
-function formatNumber(value: number, key: string, path: string): string {
-  if (!Number.isFinite(value)) {
-    throw new PbxprojBuildError(`Cannot serialize non-finite number ${String(value)}`, path);
-  }
+/** The caller has already rejected non-finite values (with the value's path). */
+function formatNumber(value: number, key: string): string {
   if (Number.isInteger(value) && keyHasFloatValue(key)) {
     return `${value}.0`;
   }
   return String(value);
+}
+
+function nonFiniteNumber(value: number, path: string): PbxprojBuildError {
+  return new PbxprojBuildError(`Cannot serialize non-finite number ${String(value)}`, path);
 }
 
 function invalidValue(value: unknown, path: string): PbxprojBuildError {
@@ -56,10 +58,34 @@ function invalidValue(value: unknown, path: string): PbxprojBuildError {
   );
 }
 
+/** Indentation strings by depth, extended on demand; avoids a `repeat` allocation per line. */
+const INDENTS: string[] = [""];
+function indentString(depth: number): string {
+  let known = INDENTS[INDENTS.length - 1]!;
+  while (INDENTS.length <= depth) {
+    known += "\t";
+    INDENTS.push(known);
+  }
+  return INDENTS[depth]!;
+}
+
 class Writer {
   private out = "";
   private indent = 0;
   private readonly comments: Map<string, string>;
+  /**
+   * Rendered string values by input string: `id /* comment *​/` for
+   * referenced uuids, quoted text for everything else. Referenced objects
+   * render at least twice (their section entry plus each referencing site)
+   * and build settings repeat across configurations, so most renders are
+   * cache hits. The map lives for one build call only.
+   */
+  private readonly renderedReferences = new Map<string, string>();
+  /**
+   * Quoting decisions for dictionary keys, which draw from a small repeated
+   * vocabulary (`isa`, `fileRef`, build-setting names).
+   */
+  private readonly quotedKeys = new Map<string, string>();
 
   constructor(root: PbxprojObject) {
     this.comments = createReferenceComments(root);
@@ -76,22 +102,33 @@ class Writer {
   }
 
   private pad(): void {
-    this.out += "\t".repeat(this.indent);
+    this.out += indentString(this.indent);
   }
 
   private line(text: string): void {
-    this.pad();
-    this.out += text;
-    this.out += "\n";
+    this.out += `${indentString(this.indent)}${text}\n`;
   }
 
   /** A uuid reference with its display comment, or a plain quoted value. */
   private referenceOrValue(id: string): string {
-    const comment = this.comments.get(id);
-    if (comment != null && comment.length > 0) {
-      return `${id} /* ${comment} */`;
+    const cached = this.renderedReferences.get(id);
+    if (cached != null) {
+      return cached;
     }
-    return ensureQuotes(id);
+    const comment = this.comments.get(id);
+    const rendered = comment != null && comment.length > 0 ? `${id} /* ${comment} */` : ensureQuotes(id);
+    this.renderedReferences.set(id, rendered);
+    return rendered;
+  }
+
+  private quotedKey(key: string): string {
+    const cached = this.quotedKeys.get(key);
+    if (cached != null) {
+      return cached;
+    }
+    const quoted = ensureQuotes(key);
+    this.quotedKeys.set(key, quoted);
+    return quoted;
   }
 
   /**
@@ -106,35 +143,52 @@ class Writer {
     return this.referenceOrValue(value);
   }
 
+  // Value paths (`$.objects.AA….name`) exist for error messages and are only
+  // constructed in the branches that recurse or throw; the flat string and
+  // number lines that dominate documents skip the concatenation. Output is
+  // appended piecewise — engines represent string concatenation as ropes, so
+  // appends are cheap while interpolation templates would allocate an
+  // intermediate string per line.
   private writeObjectBody(object: PbxprojObject, isBase: boolean, path: string): void {
-    for (const [key, value] of Object.entries(object)) {
-      const valuePath = `${path}.${key}`;
+    for (const key of Object.keys(object)) {
+      const value = object[key];
       if (typeof value === "string") {
-        this.line(`${ensureQuotes(key)} = ${this.stringValue(key, value)};`);
+        this.out += indentString(this.indent);
+        this.out += this.quotedKey(key);
+        this.out += " = ";
+        this.out += this.stringValue(key, value);
+        this.out += ";\n";
       } else if (typeof value === "number") {
-        this.line(`${ensureQuotes(key)} = ${formatNumber(value, key, valuePath)};`);
+        if (!Number.isFinite(value)) {
+          throw nonFiniteNumber(value, `${path}.${key}`);
+        }
+        this.out += indentString(this.indent);
+        this.out += this.quotedKey(key);
+        this.out += " = ";
+        this.out += formatNumber(value, key);
+        this.out += ";\n";
       } else if (value instanceof Uint8Array) {
-        this.line(`${ensureQuotes(key)} = ${formatData(value)};`);
+        this.line(`${this.quotedKey(key)} = ${formatData(value)};`);
       } else if (Array.isArray(value)) {
-        this.writeArray(key, value, valuePath);
+        this.writeArray(key, value, `${path}.${key}`);
       } else if (isDictionary(value)) {
         if (!isBase && Object.keys(value).length === 0) {
-          this.line(`${ensureQuotes(key)} = {};`);
+          this.line(`${this.quotedKey(key)} = {};`);
           continue;
         }
-        this.line(`${ensureQuotes(key)} = {`);
+        this.line(`${this.quotedKey(key)} = {`);
         this.indent++;
         if (isBase && key === "objects") {
-          this.writeObjectsSections(value, valuePath);
+          this.writeObjectsSections(value, `${path}.${key}`);
         } else {
           // The base flag applies to root-level keys only; nested empty
           // dictionaries collapse to `{}` even under a root dictionary.
-          this.writeObjectBody(value, false, valuePath);
+          this.writeObjectBody(value, false, `${path}.${key}`);
         }
         this.indent--;
         this.line("};");
       } else {
-        throw invalidValue(value, valuePath);
+        throw invalidValue(value, `${path}.${key}`);
       }
     }
   }
@@ -142,7 +196,8 @@ class Writer {
   /** The root `objects` dictionary, grouped into per-isa sections. */
   private writeObjectsSections(objects: PbxprojObject, path: string): void {
     const byIsa = new Map<string, [string, PbxprojObject][]>();
-    for (const [id, object] of Object.entries(objects)) {
+    for (const id of Object.keys(objects)) {
+      const object = objects[id];
       if (!isDictionary(object)) {
         throw invalidValue(object, `${path}.${id}`);
       }
@@ -189,30 +244,36 @@ class Writer {
   private inlineObject(key: string, object: PbxprojObject, path: string): string {
     let text = `${this.referenceOrValue(key)} = {`;
 
-    for (const [innerKey, value] of Object.entries(object)) {
-      const valuePath = `${path}.${innerKey}`;
+    for (const innerKey of Object.keys(object)) {
+      const value = object[innerKey];
       if (typeof value === "string") {
-        text += `${ensureQuotes(innerKey)} = ${this.stringValue(innerKey, value)}; `;
+        text += `${this.quotedKey(innerKey)} = ${this.stringValue(innerKey, value)}; `;
       } else if (typeof value === "number") {
-        text += `${ensureQuotes(innerKey)} = ${formatNumber(value, innerKey, valuePath)}; `;
+        if (!Number.isFinite(value)) {
+          throw nonFiniteNumber(value, `${path}.${innerKey}`);
+        }
+        text += `${this.quotedKey(innerKey)} = ${formatNumber(value, innerKey)}; `;
       } else if (value instanceof Uint8Array) {
-        text += `${ensureQuotes(innerKey)} = ${formatData(value)}; `;
+        text += `${this.quotedKey(innerKey)} = ${formatData(value)}; `;
       } else if (Array.isArray(value)) {
-        text += `${ensureQuotes(innerKey)} = (`;
-        for (const [index, item] of value.entries()) {
+        text += `${this.quotedKey(innerKey)} = (`;
+        for (let index = 0; index < value.length; index++) {
+          const item = value[index];
           if (typeof item === "string") {
             text += `${ensureQuotes(item)}, `;
-          } else if (typeof item === "number") {
-            text += `${formatNumber(item, "", `${valuePath}[${index}]`)}, `;
+          } else if (typeof item === "number" && Number.isFinite(item)) {
+            text += `${formatNumber(item, "")}, `;
           } else {
-            throw invalidValue(item, `${valuePath}[${index}]`);
+            throw typeof item === "number"
+              ? nonFiniteNumber(item, `${path}.${innerKey}[${index}]`)
+              : invalidValue(item, `${path}.${innerKey}[${index}]`);
           }
         }
         text += "); ";
       } else if (isDictionary(value)) {
-        text += this.inlineObject(innerKey, value, valuePath);
+        text += this.inlineObject(innerKey, value, `${path}.${innerKey}`);
       } else {
-        throw invalidValue(value, valuePath);
+        throw invalidValue(value, `${path}.${innerKey}`);
       }
     }
 
@@ -221,27 +282,30 @@ class Writer {
   }
 
   private writeArray(key: string, items: PbxprojValue[], path: string): void {
-    this.line(`${ensureQuotes(key)} = (`);
+    this.line(`${this.quotedKey(key)} = (`);
     this.indent++;
 
-    for (const [index, item] of items.entries()) {
-      const itemPath = `${path}[${index}]`;
+    for (let index = 0; index < items.length; index++) {
+      const item = items[index];
       if (typeof item === "string") {
-        this.line(`${this.referenceOrValue(item)},`);
+        this.out += indentString(this.indent);
+        this.out += this.referenceOrValue(item);
+        this.out += ",\n";
       } else if (typeof item === "number") {
-        this.line(`${formatNumber(item, "", itemPath)},`);
+        if (!Number.isFinite(item)) {
+          throw nonFiniteNumber(item, `${path}[${index}]`);
+        }
+        this.line(`${formatNumber(item, "")},`);
       } else if (item instanceof Uint8Array) {
         this.line(`${formatData(item)},`);
-      } else if (Array.isArray(item)) {
-        throw invalidValue(item, itemPath);
       } else if (isDictionary(item)) {
         this.line("{");
         this.indent++;
-        this.writeObjectBody(item, false, itemPath);
+        this.writeObjectBody(item, false, `${path}[${index}]`);
         this.indent--;
         this.line("},");
       } else {
-        throw invalidValue(item, itemPath);
+        throw invalidValue(item, `${path}[${index}]`);
       }
     }
 

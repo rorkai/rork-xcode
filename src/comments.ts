@@ -68,20 +68,38 @@ export function createReferenceComments(root: PbxprojValue): Map<string, string>
   }
   const objects = objectsValue;
 
-  // Reverse index: build-file uuid → containing phase. Precomputing it keeps
-  // PBXBuildFile comment derivation linear over projects with thousands of
-  // build files.
+  // Reverse indexes, derived in one pass over the object graph. Per-lookup
+  // linear scans would make comment derivation quadratic over projects with
+  // thousands of build files or many configuration lists. Where multiple
+  // owners are possible, the first occurrence wins, matching document order.
   const fileToPhase = new Map<string, PhaseInfo>();
-  for (const object of Object.values(objects)) {
-    if (!isDictionary(object)) continue;
-    const isa = asString(object["isa"]) ?? "";
-    if (!isa.endsWith("BuildPhase")) continue;
-    const files = object["files"];
-    if (!Array.isArray(files)) continue;
-    for (const file of files) {
-      if (typeof file === "string") {
-        fileToPhase.set(file, { isa, name: asString(object["name"]) });
+  const configurationListOwners = new Map<string, [id: string, owner: PbxprojObject]>();
+  const proxyRemoteInfoByPortal = new Map<string, string>();
+  for (const ownerId of Object.keys(objects)) {
+    const owner = objects[ownerId];
+    if (!isDictionary(owner)) continue;
+    const isa = asString(owner["isa"]) ?? "";
+
+    if (isa.endsWith("BuildPhase")) {
+      const files = owner["files"];
+      if (Array.isArray(files)) {
+        for (const file of files) {
+          if (typeof file === "string") {
+            fileToPhase.set(file, { isa, name: asString(owner["name"]) });
+          }
+        }
       }
+    } else if (isa === "PBXContainerItemProxy") {
+      const portal = asString(owner["containerPortal"]);
+      const remoteInfo = asString(owner["remoteInfo"]);
+      if (portal != null && remoteInfo != null && !proxyRemoteInfoByPortal.has(portal)) {
+        proxyRemoteInfoByPortal.set(portal, remoteInfo);
+      }
+    }
+
+    const listId = asString(owner["buildConfigurationList"]);
+    if (listId != null && !configurationListOwners.has(listId)) {
+      configurationListOwners.set(listId, [ownerId, owner]);
     }
   }
 
@@ -100,44 +118,37 @@ export function createReferenceComments(root: PbxprojValue): Map<string, string>
   };
 
   const configurationListComment = (id: string): string => {
-    for (const [ownerId, owner] of Object.entries(objects)) {
-      if (!isDictionary(owner) || asString(owner["buildConfigurationList"]) !== id) continue;
-
-      const isa = asString(owner["isa"]) ?? "";
-      const ownName = asString(owner["name"]) ?? asString(owner["path"]) ?? asString(owner["productName"]);
-      if (ownName != null) {
-        return `Build configuration list for ${isa} "${ownName}"`;
-      }
-
-      // A PBXProject has no name of its own; borrow the first target's.
-      const targets = owner["targets"];
-      if (Array.isArray(targets)) {
-        const firstTargetId = targets.find((target): target is string => typeof target === "string");
-        const firstTarget = firstTargetId == null ? undefined : objects[firstTargetId];
-        if (isDictionary(firstTarget)) {
-          const targetName = asString(firstTarget["productName"]) ?? asString(firstTarget["name"]);
-          if (targetName != null) {
-            return `Build configuration list for ${isa} "${targetName}"`;
-          }
-        }
-      }
-
-      for (const candidate of Object.values(objects)) {
-        if (
-          isDictionary(candidate) &&
-          asString(candidate["isa"]) === "PBXContainerItemProxy" &&
-          asString(candidate["containerPortal"]) === ownerId
-        ) {
-          const remoteInfo = asString(candidate["remoteInfo"]);
-          if (remoteInfo != null) {
-            return `Build configuration list for ${isa} "${remoteInfo}"`;
-          }
-        }
-      }
-
-      return `Build configuration list for ${isa}`;
+    const ownerEntry = configurationListOwners.get(id);
+    if (ownerEntry == null) {
+      return "Build configuration list for [unknown]";
     }
-    return "Build configuration list for [unknown]";
+    const [ownerId, owner] = ownerEntry;
+
+    const isa = asString(owner["isa"]) ?? "";
+    const ownName = asString(owner["name"]) ?? asString(owner["path"]) ?? asString(owner["productName"]);
+    if (ownName != null) {
+      return `Build configuration list for ${isa} "${ownName}"`;
+    }
+
+    // A PBXProject has no name of its own; borrow the first target's.
+    const targets = owner["targets"];
+    if (Array.isArray(targets)) {
+      const firstTargetId = targets.find((target): target is string => typeof target === "string");
+      const firstTarget = firstTargetId == null ? undefined : objects[firstTargetId];
+      if (isDictionary(firstTarget)) {
+        const targetName = asString(firstTarget["productName"]) ?? asString(firstTarget["name"]);
+        if (targetName != null) {
+          return `Build configuration list for ${isa} "${targetName}"`;
+        }
+      }
+    }
+
+    const remoteInfo = proxyRemoteInfoByPortal.get(ownerId);
+    if (remoteInfo != null) {
+      return `Build configuration list for ${isa} "${remoteInfo}"`;
+    }
+
+    return `Build configuration list for ${isa}`;
   };
 
   const commentFor = (id: string, object: PbxprojObject): string | undefined => {
@@ -181,7 +192,8 @@ export function createReferenceComments(root: PbxprojValue): Map<string, string>
     return comment;
   };
 
-  for (const [id, object] of Object.entries(objects)) {
+  for (const id of Object.keys(objects)) {
+    const object = objects[id];
     if (isDictionary(object)) {
       commentFor(id, object);
     }

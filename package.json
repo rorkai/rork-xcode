@@ -40,14 +40,16 @@
   "scripts": {
     "build": "tsdown",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p bench",
     "lint": "oxlint",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "checks": "pnpm build && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
+    "bench:compare": "pnpm build && node bench/compare.ts",
     "prepublishOnly": "pnpm checks"
   },
   "devDependencies": {
+    "@bacons/xcode": "1.0.0-alpha.33",
     "@types/node": "^20.19.43",
     "eslint": "8.57.1",
     "eslint-plugin-perfectionist": "5.9.1",
@@ -55,7 +57,8 @@
     "oxlint": "1.72.0",
     "tsdown": "^0.22.3",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.9",
+    "xcode": "3.0.1"
   },
   "devEngines": {
     "runtime": {

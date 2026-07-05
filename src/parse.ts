@@ -83,7 +83,11 @@ class Parser {
     throw new PbxprojParseError(message, this.input, offset);
   }
 
-  /** Skips whitespace and `//` / `/* *​/` comments in bulk. */
+  /**
+   * Skips whitespace and `//` / `/* *​/` comments in bulk. Comment bodies are
+   * jumped over with `indexOf` rather than scanned per character — reference
+   * comments make up a sizable share of a canonical document's bytes.
+   */
   skipTrivia(): void {
     const input = this.input;
     const length = input.length;
@@ -99,21 +103,13 @@ class Parser {
       if (input.charCodeAt(pos) === CODE_SLASH && pos + 1 < length) {
         const next = input.charCodeAt(pos + 1);
         if (next === CODE_SLASH) {
-          pos += 2;
-          while (pos < length && input.charCodeAt(pos) !== CODE_LINE_FEED) {
-            pos++;
-          }
+          const lineEnd = input.indexOf("\n", pos + 2);
+          pos = lineEnd === -1 ? length : lineEnd;
           continue;
         }
         if (next === CODE_ASTERISK) {
-          pos += 2;
-          while (pos + 1 < length) {
-            if (input.charCodeAt(pos) === CODE_ASTERISK && input.charCodeAt(pos + 1) === CODE_SLASH) {
-              pos += 2;
-              break;
-            }
-            pos++;
-          }
+          const commentEnd = input.indexOf("*/", pos + 2);
+          pos = commentEnd === -1 ? length : commentEnd + 2;
           continue;
         }
       }
@@ -131,6 +127,13 @@ class Parser {
   }
 
   expect(code: number, description: string): void {
+    // Canonical documents place `=` and `;` directly after tokens, so the
+    // expected character is usually at the cursor with no trivia before it
+    // (charCodeAt returns NaN past the end, which simply misses the match).
+    if (this.input.charCodeAt(this.pos) === code) {
+      this.pos++;
+      return;
+    }
     this.skipTrivia();
     if (this.pos < this.input.length && this.input.charCodeAt(this.pos) === code) {
       this.pos++;
@@ -216,75 +219,6 @@ class Parser {
       bytes[i >> 1] = Number.parseInt(hex.slice(i, i + 2), 16);
     }
     return bytes;
-  }
-
-  /**
-   * Reads an unquoted literal value, classifying it as number or string in
-   * the same scan. Projects are dominated by 24-character identifiers that
-   * start with a digit, so a separate classification pass would re-scan
-   * almost every reference in the document.
-   *
-   * See the module documentation of `types.ts` for the exact policy and the
-   * reasoning behind the string preservations (leading zeros, trailing-zero
-   * decimals, unsafe integers).
-   */
-  readLiteralValue(): PbxprojValue {
-    const input = this.input;
-    const length = input.length;
-    const start = this.pos;
-
-    // A leading '-' is the only position where a sign reads as numeric.
-    const leadingSign = input.charCodeAt(start) === CODE_MINUS;
-
-    let digits = 0;
-    let dots = 0;
-    let others = leadingSign ? -1 : 0; // discount the sign itself
-    let pos = start;
-    let lastCode = 0;
-    while (pos < length) {
-      const code = input.charCodeAt(pos);
-      if (IS_LITERAL_CHAR[code] !== 1) break;
-      if (code >= CODE_ZERO && code <= CODE_NINE) {
-        digits++;
-      } else if (code === CODE_DOT) {
-        dots++;
-      } else {
-        others++;
-      }
-      lastCode = code;
-      pos++;
-    }
-    this.pos = pos;
-    const runLength = pos - start;
-    const literal = input.slice(start, pos);
-
-    if (others !== 0 || digits === 0) {
-      return literal;
-    }
-
-    if (dots === 0 && !leadingSign) {
-      // Pure digit run. Leading zeros carry meaning (file modes, padded
-      // ids); a too-large run cannot survive the trip through a double.
-      if (runLength === 1) {
-        return input.charCodeAt(start) - CODE_ZERO;
-      }
-      if (input.charCodeAt(start) === CODE_ZERO) {
-        return literal;
-      }
-      const value = Number(literal);
-      return value <= Number.MAX_SAFE_INTEGER ? value : literal;
-    }
-
-    if (dots === 1) {
-      // Decimal with digit-only halves. Trailing-zero decimals stay strings
-      // to survive round-trips.
-      if (lastCode === CODE_ZERO) {
-        return literal;
-      }
-      return Number(literal);
-    }
-
-    return literal;
   }
 
   parseDocument(): PbxprojValue {
@@ -377,10 +311,77 @@ class Parser {
     if (code === CODE_OPEN_BRACE) return this.parseObject();
     if (code === CODE_OPEN_PAREN) return this.parseArray();
     if (code === CODE_QUOTE || code === CODE_SINGLE_QUOTE) return this.readQuotedString();
-    if (IS_LITERAL_CHAR[code] === 1) return this.readLiteralValue();
+    if (IS_LITERAL_CHAR[code] === 1) return interpretLiteral(this.readLiteral());
     if (code === CODE_LESS_THAN) return this.readData();
     this.fail(`Expected a value but found '${this.input[this.pos]}'`);
   }
+}
+
+/**
+ * Decides whether an unquoted literal is a number or a string.
+ *
+ * One loop with an early exit: the first character outside `[0-9.]` (after
+ * an optional leading `-`) settles the token as a string, so the
+ * 24-character identifiers that dominate project documents are classified
+ * within their first few characters.
+ *
+ * See the module documentation of `types.ts` for the exact policy and the
+ * reasoning behind the string preservations (leading zeros, trailing-zero
+ * decimals, unsafe integers).
+ */
+function interpretLiteral(literal: string): PbxprojValue {
+  const length = literal.length;
+  const first = literal.charCodeAt(0);
+
+  // A leading '-' is the only position where a sign reads as numeric.
+  let start = 0;
+  let negative = false;
+  if (first === CODE_MINUS && length > 1) {
+    negative = true;
+    start = 1;
+  } else if (!isDigit(first) && first !== CODE_DOT) {
+    return literal;
+  }
+
+  let digits = 0;
+  let dots = 0;
+  for (let i = start; i < length; i++) {
+    const code = literal.charCodeAt(i);
+    if (code >= CODE_ZERO && code <= CODE_NINE) {
+      digits++;
+    } else if (code === CODE_DOT && dots === 0) {
+      dots = 1;
+    } else {
+      return literal;
+    }
+  }
+  if (digits === 0) {
+    return literal; // "-", ".", "-."
+  }
+
+  if (dots === 0) {
+    // Pure digit runs: negative integers stay strings (Xcode never writes
+    // them unquoted), leading zeros carry meaning (file modes, padded ids),
+    // and a too-large run cannot survive the trip through a double.
+    if (negative) {
+      return literal;
+    }
+    if (length === 1) {
+      return first - CODE_ZERO;
+    }
+    if (first === CODE_ZERO) {
+      return literal;
+    }
+    const value = Number(literal);
+    return value <= Number.MAX_SAFE_INTEGER ? value : literal;
+  }
+
+  // Exactly one dot. Trailing-zero decimals stay strings to survive
+  // round-trips.
+  if (literal.charCodeAt(length - 1) === CODE_ZERO) {
+    return literal;
+  }
+  return Number(literal);
 }
 
 /**

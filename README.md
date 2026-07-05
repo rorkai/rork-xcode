@@ -3,7 +3,7 @@
 [![CI](https://github.com/rorkai/rork-xcode/actions/workflows/ci.yml/badge.svg)](https://github.com/rorkai/rork-xcode/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/rork-xcode)](https://www.npmjs.com/package/rork-xcode)
 
-Zero-dependency Xcode project (`project.pbxproj`) parser and builder for any JavaScript runtime: browsers, Node.js, Bun, Electron, Cloudflare Workers, and React Native.
+The [fastest](#performance) zero-dependency Xcode project (`project.pbxproj`) parser and builder for any JavaScript runtime: browsers, Node.js, Bun, Electron, Cloudflare Workers, and React Native.
 
 ```ts
 import { parsePbxproj, buildPbxproj } from "rork-xcode";
@@ -85,6 +85,28 @@ try {
 ```
 
 Booleans are rejected on purpose: the format has no boolean notation — Xcode models flags as the strings `"YES"` and `"NO"` — so writing one would produce a value Xcode misreads.
+
+## Performance
+
+`rork-xcode` is measured against the pbxproj parsers on npm — [`@bacons/xcode`](https://www.npmjs.com/package/@bacons/xcode) (its `/json` parse/build entry point) and [`xcode`](https://www.npmjs.com/package/xcode) (the long-standing package used by native build tooling) — on three documents: two real Xcode-written projects from the test suite and a deterministically generated five-target app with 800 source files. It is the fastest at both operations on every document, with zero dependencies.
+
+| Operation | Document                | `rork-xcode` | `@bacons/xcode`  | `xcode`          |
+| --------- | ----------------------- | ------------ | ---------------- | ---------------- |
+| parse     | legacy app (7 KiB)      | **13.9 µs**  | 17.8 µs (1.3×)   | 297.7 µs (21.4×) |
+| parse     | app, Xcode 16 (20 KiB)  | **43.7 µs**  | 54.4 µs (1.2×)   | 795.0 µs (18.2×) |
+| parse     | generated app (471 KiB) | **0.84 ms**  | 1.20 ms (1.4×)   | 19.74 ms (23.6×) |
+| build     | legacy app              | **15.9 µs**  | 43.1 µs (2.7×)   | 29.6 µs (1.9×)   |
+| build     | app, Xcode 16           | **37.5 µs**  | 113.6 µs (3.0×)  | 71.3 µs (1.9×)   |
+| build     | generated app           | **0.98 ms**  | 85.98 ms (87.7×) | 1.20 ms (1.2×)   |
+
+Measured on an Apple M5 Max, Node.js 24, single thread, with `@bacons/xcode` 1.0.0-alpha.33 and `xcode` 3.0.1. Multipliers are relative to `rork-xcode` on the same row; the ordering also holds on Bun. Reproduce with `pnpm bench:compare`, which interleaves the libraries in round-robin batches and reports the median, after verifying that every library round-trips every fixture.
+
+### Key performance features
+
+- **Single-pass scanner.** One cursor over the input string with table-driven character classification; no tokenizer stage, no intermediate token objects.
+- **Comments skip in bulk.** Reference comments are a sizable share of a canonical document's bytes; comment bodies are jumped with `indexOf` instead of being scanned per character.
+- **Linear comment derivation.** Building the `/* … */` annotations uses reverse indexes over the object graph (build file → phase, configuration list → owner), so serialization stays linear on projects with thousands of objects.
+- **Memoized rendering.** Quoting decisions for the repeated key vocabulary and rendered uuid references are cached per document, halving the quote scans on reference-heavy sections.
 
 ## Verification
 
