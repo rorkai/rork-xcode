@@ -91,6 +91,13 @@ class Parser {
   pos = 0;
 
   /**
+   * Offset of an unterminated block comment the trivia scanner consumed, or
+   * -1. Recording it instead of throwing keeps the trivia scanner free of
+   * failure branches; see {@link fail}.
+   */
+  private unterminatedCommentAt = -1;
+
+  /**
    * @param input Source text of the document.
    */
   constructor(input: string) {
@@ -101,71 +108,86 @@ class Parser {
    * Throws a {@link PbxprojParseError} carrying the line and column of the
    * failure.
    *
+   * An unterminated block comment swallows the rest of the input, so any
+   * failure raised after one (always some end-of-input error) is a symptom;
+   * the comment itself is reported instead. Content after the root value is
+   * never scanned, so a trailing unterminated comment still parses, as
+   * Apple's parser accepts it too.
+   *
    * @param message Failure description without location.
    * @param offset Offset of the failure; defaults to the current cursor.
    */
   fail(message: string, offset = this.pos): never {
+    if (this.unterminatedCommentAt !== -1) {
+      throw new PbxprojParseError("Unterminated block comment", this.input, this.unterminatedCommentAt);
+    }
     throw new PbxprojParseError(message, this.input, offset);
   }
 
   /**
    * Skips whitespace and `//` / `/* *​/` comments in bulk.
    *
-   * The whitespace loop is the hottest path in the scanner and stays small
-   * enough for the engine to inline into the parse loops; comment handling
-   * lives in {@link skipComment}.
+   * Most trivia gaps are pure whitespace, so this hot method is only the
+   * whitespace loop plus one slash check, small enough for the engine to
+   * inline into the parse loops. Gaps containing comments continue in
+   * {@link skipCommentedTrivia}.
    */
   skipTrivia(): void {
     const input = this.input;
     const length = input.length;
     let pos = this.pos;
 
-    for (;;) {
-      while (pos < length && IS_WHITESPACE[input.charCodeAt(pos)] === 1) {
-        pos++;
-      }
+    while (pos < length && IS_WHITESPACE[input.charCodeAt(pos)] === 1) {
+      pos++;
+    }
 
-      if (pos < length && input.charCodeAt(pos) === CODE_SLASH) {
-        const afterComment = this.skipComment(pos);
-        if (afterComment !== pos) {
-          pos = afterComment;
-          continue;
-        }
-      }
-
-      break;
+    if (pos < length && input.charCodeAt(pos) === CODE_SLASH) {
+      pos = this.skipCommentedTrivia(pos);
     }
 
     this.pos = pos;
   }
 
   /**
-   * Skips one comment whose `/` sits at `pos` and returns the position
-   * after it, or `pos` unchanged when the slash does not open a comment.
+   * Continues a trivia scan whose cursor sits on a `/`, consuming comments
+   * and any whitespace between them until significant content follows.
+   * Returns the position of that content (`pos` unchanged when the slash
+   * does not open a comment, since `/` also starts unquoted path literals).
    *
    * Comment bodies are jumped over with `indexOf` rather than scanned per
    * character. Reference comments make up a sizable share of a canonical
-   * document's bytes, and `indexOf` uses the engine's vectorized search.
+   * document's bytes, and `indexOf` uses the engine's vectorized search. An
+   * unterminated block comment consumes the rest of the input and records
+   * its offset for {@link fail}, keeping throw sites off the scanner paths.
    */
-  private skipComment(pos: number): number {
+  private skipCommentedTrivia(pos: number): number {
     const input = this.input;
-    // charCodeAt returns NaN past the end, matching neither comment opener.
-    const next = input.charCodeAt(pos + 1);
-    if (next === CODE_SLASH) {
-      const lineEnd = input.indexOf("\n", pos + 2);
-      return lineEnd === -1 ? input.length : lineEnd;
-    }
-    if (next === CODE_ASTERISK) {
-      const commentEnd = input.indexOf("*/", pos + 2);
-      if (commentEnd === -1) {
-        // Only comments before or inside the root value reach this scanner;
-        // content after the root is never read, so a trailing unterminated
-        // comment still parses (as Apple's parser does).
-        this.fail("Unterminated block comment", pos);
+    const length = input.length;
+
+    for (;;) {
+      // charCodeAt returns NaN past the end, matching neither comment kind.
+      const next = input.charCodeAt(pos + 1);
+      if (next === CODE_SLASH) {
+        const lineEnd = input.indexOf("\n", pos + 2);
+        pos = lineEnd === -1 ? length : lineEnd;
+      } else if (next === CODE_ASTERISK) {
+        const commentEnd = input.indexOf("*/", pos + 2);
+        if (commentEnd === -1) {
+          this.unterminatedCommentAt = pos;
+          return length;
+        }
+        pos = commentEnd + 2;
+      } else {
+        return pos;
       }
-      return commentEnd + 2;
+
+      while (pos < length && IS_WHITESPACE[input.charCodeAt(pos)] === 1) {
+        pos++;
+      }
+      if (pos >= length || input.charCodeAt(pos) !== CODE_SLASH) {
+        return pos;
+      }
     }
-    return pos;
   }
 
   /**

@@ -155,33 +155,50 @@ class Writer {
 
   /**
    * Renders a string as a uuid reference with its display comment, or as a
-   * plain quoted value when no comment is derived for it. Annotated ids are
-   * quoted too when the format requires it: Xcode ids never need quotes,
-   * but object keys in hand-written documents can.
+   * plain quoted value when no comment is derived for it.
+   *
+   * Most calls hit the cache, and the writers call this for every key and
+   * reference, so the method body stays small enough for the engine to
+   * inline; the miss path lives in {@link renderReferenceUncached}.
    */
   private renderReference(id: string): string {
     const cached = this.renderedReferences.get(id);
     if (cached != null) {
       return cached;
     }
+    return this.renderReferenceUncached(id);
+  }
+
+  /**
+   * Renders and caches one reference on its first occurrence. Annotated ids
+   * are quoted too when the format requires it: Xcode ids never need
+   * quotes, but object keys in hand-written documents can.
+   */
+  private renderReferenceUncached(id: string): string {
     const comment = this.comments.get(id);
-    const rendered =
-      comment != null && comment.length > 0
-        ? `${ensureQuotes(id)} /* ${sanitizeComment(comment)} */`
-        : ensureQuotes(id);
+    const quoted = ensureQuotes(id);
+    const rendered = comment != null && comment.length > 0 ? `${quoted} /* ${sanitizeComment(comment)} */` : quoted;
     this.renderedReferences.set(id, rendered);
     return rendered;
   }
 
   /**
    * Renders a dictionary key with quotes when the format requires them,
-   * memoized across the document.
+   * memoized across the document. As with {@link renderReference}, the
+   * cache-hit path stays small and the miss path is a separate method.
    */
   private renderKey(key: string): string {
     const cached = this.quotedKeys.get(key);
     if (cached != null) {
       return cached;
     }
+    return this.renderKeyUncached(key);
+  }
+
+  /**
+   * Quotes and caches one dictionary key on its first occurrence.
+   */
+  private renderKeyUncached(key: string): string {
     const quoted = ensureQuotes(key);
     this.quotedKeys.set(key, quoted);
     return quoted;

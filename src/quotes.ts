@@ -9,36 +9,22 @@
  */
 
 /**
- * The writer's unquoted-safe alphabet, `[A-Za-z0-9_$/:.]`, as a 256-entry
- * table. Quoting decisions scan every string value a document carries, so
- * classification is one array read per character; non-ASCII code units
- * index past the table and read `undefined`, which is correctly falsy.
+ * The writer's unquoted-safe alphabet. The `+` also rejects the empty
+ * string, which must render as `""`.
  */
-const IS_UNQUOTED_SAFE: Uint8Array = (() => {
-  const table = new Uint8Array(256);
-  for (let i = 0x61; i <= 0x7a; i++) table[i] = 1; // a-z
-  for (let i = 0x41; i <= 0x5a; i++) table[i] = 1; // A-Z
-  for (let i = 0x30; i <= 0x39; i++) table[i] = 1; // 0-9
-  for (const ch of "_$/:.") table[ch.charCodeAt(0)] = 1;
-  return table;
-})();
+const UNQUOTED_SAFE_PATTERN = /^[A-Za-z0-9_$/:.]+$/;
 
 /**
- * Whether every character is in the writer's unquoted-safe alphabet:
- * `[A-Za-z0-9_$/:.]`.
+ * Whether the value can render without quotes: every character is in the
+ * unquoted-safe alphabet and the string is not empty.
  *
- * The empty string is not safe; it must render as `""`.
+ * Quoting decisions scan every string a document carries, and many of those
+ * strings are substring slices of the source text. The regex engine flattens
+ * and scans them in bulk, which measures faster here than a per-character
+ * `charCodeAt` loop.
  */
 export function isSafeUnquoted(value: string): boolean {
-  if (value.length === 0) {
-    return false;
-  }
-  for (let i = 0; i < value.length; i++) {
-    if (IS_UNQUOTED_SAFE[value.charCodeAt(i)] !== 1) {
-      return false;
-    }
-  }
-  return true;
+  return UNQUOTED_SAFE_PATTERN.test(value);
 }
 
 /**
