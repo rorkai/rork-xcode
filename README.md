@@ -119,6 +119,15 @@ Measured on an Apple M5 Max, Node.js 24, single thread, with `@bacons/xcode` 1.0
 - A corpus sweep (`pnpm corpus`) walks every Xcode project on the machine, verifies each one parses and reaches a byte-stable fixed point, and cross-validates a sample of parsed values against plutil's own reading.
 - CI runs the full gate on Linux and macOS, and executes the built artifact on the oldest supported Node to enforce the `engines` floor.
 
+## Releasing
+
+Releases publish to npm from CI with [provenance](https://docs.npmjs.com/generating-provenance-statements) via [trusted publishing](https://docs.npmjs.com/trusted-publishers); no long-lived tokens are stored in the repository.
+
+1. Bump `version` in `package.json` and merge to `main`.
+2. Create a GitHub release with an `X.Y.Z` tag matching the new version.
+3. The release workflow verifies the tag, runs the full gate (including
+   plutil cross-validation on the macOS runner), and publishes.
+
 ## License
 
 Apache-2.0
