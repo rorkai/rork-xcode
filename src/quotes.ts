@@ -27,7 +27,7 @@ const IS_UNQUOTED_SAFE: Uint8Array = (() => {
  * Whether every character is in the writer's unquoted-safe alphabet:
  * `[A-Za-z0-9_$/:.]`.
  *
- * The empty string is not safe — it must render as `""`.
+ * The empty string is not safe; it must render as `""`.
  */
 export function isSafeUnquoted(value: string): boolean {
   if (value.length === 0) {

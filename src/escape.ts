@@ -126,7 +126,7 @@ function readOctalEscape(input: string, index: number): [text: string, next: num
 /**
  * Decodes one escape sequence whose backslash sits at `index`. Returns the
  * decoded text and the index after the sequence. Unknown escapes preserve
- * both characters — the lenient behavior needed to read files written by
+ * both characters, the lenient behavior needed to read files written by
  * tools with sloppier escaping than Xcode's.
  */
 function decodeEscape(input: string, index: number): [text: string, next: number] {

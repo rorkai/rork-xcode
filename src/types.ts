@@ -11,16 +11,17 @@
  * - Unquoted integers and decimals (`46`, `3.14`, `-12`) parse to `number`
  *   under one print-back rule: the literal converts exactly when the number
  *   formats back to the identical text.
- * - Everything else — quoted text, identifiers, uuids, paths — parses to
+ * - Everything else (quoted text, identifiers, uuids, paths) parses to
  *   `string`.
  *
  * The print-back rule is what keeps round-trips faithful: any literal the
  * conversion would reshape stays a string, so serializing never changes a
- * scalar's bytes. Leading-zero runs (`0755`) would corrupt file modes,
- * trailing-zero decimals (`5.0`) would drop the zero build settings are
- * written with, bare-dot decimals (`.5`) would grow a leading zero, and
- * digit runs beyond `Number.MAX_SAFE_INTEGER` — 24-character identifiers
- * can be all digits — would lose precision; all therefore parse as strings.
+ * scalar's bytes. Leading-zero runs like `0755` would corrupt file modes,
+ * trailing-zero decimals like `5.0` would drop the zero build settings are
+ * written with, bare-dot decimals like `.5` would grow a leading zero, and
+ * digit runs beyond `Number.MAX_SAFE_INTEGER` would lose precision (a
+ * 24-character identifier can be all digits); all of these therefore parse
+ * as strings.
  *
  * @module
  */

@@ -87,9 +87,9 @@ function indentString(depth: number): string {
  *
  * The `write*` methods append directly to the output string; the `render*`
  * methods return fragments for the caller to place. Output accumulates by
- * appending — engines represent growing strings as ropes, so appends stay
- * cheap where template interpolation would allocate an intermediate string
- * per line.
+ * appending, because engines represent growing strings as ropes: appends
+ * stay cheap where template interpolation would allocate an intermediate
+ * string per line.
  */
 class Writer {
   /** The document text accumulated so far. */
@@ -156,7 +156,7 @@ class Writer {
   /**
    * Renders a string as a uuid reference with its display comment, or as a
    * plain quoted value when no comment is derived for it. Annotated ids are
-   * quoted too when the format requires it — Xcode ids never need quotes,
+   * quoted too when the format requires it: Xcode ids never need quotes,
    * but object keys in hand-written documents can.
    */
   private renderReference(id: string): string {

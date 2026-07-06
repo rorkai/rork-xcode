@@ -78,7 +78,7 @@ export class PbxprojParseError extends Error {
  *
  * Raised for `null`, `undefined`, booleans, bigints, functions, symbols,
  * class instances, and non-finite numbers. The format itself has no boolean
- * or null notation — Xcode models booleans as the strings `YES`/`NO` — so
+ * or null notation (Xcode models booleans as the strings `YES`/`NO`), so
  * rejecting them loudly beats writing a value Xcode would misread. The
  * {@link path} pinpoints the offending value inside the input, which matters
  * when serializing a project with thousands of objects.

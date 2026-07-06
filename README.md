@@ -21,14 +21,14 @@ const text = buildPbxproj(project); // byte-stable, Xcode-canonical layout
 
 ## Why
 
-`project.pbxproj` is the heart of every Xcode project: targets, build phases, build settings, file references. Programs that create or repair Xcode projects increasingly run everywhere at once — an API on an edge runtime, a desktop app's Node process, a CLI inside a build sandbox.
+`project.pbxproj` is the heart of every Xcode project: targets, build phases, build settings, file references. Programs that create or repair Xcode projects increasingly run everywhere at once: an API on an edge runtime, a desktop app's Node process, a CLI inside a build sandbox.
 
 `rork-xcode` is designed for exactly that situation:
 
-- **Zero dependencies.** The pbxproj grammar is a small OpenStep-style property list dialect: dictionaries, arrays, strings, and hex data runs. A dedicated scanner covers it completely — no general-purpose parser stack, no native addon, no WASM blob.
+- **Zero dependencies.** The pbxproj grammar is a small OpenStep-style property list dialect: dictionaries, arrays, strings, and hex data runs. A dedicated scanner covers it completely, with no general-purpose parser stack, no native addon, and no WASM blob.
 - **One artifact, one code path.** A single ESM file with named exports. No environment-conditional entry points, no reliance on ambient globals like `Buffer`. What you test locally is what runs in production, whatever the bundler.
-- **Xcode-canonical output.** The serializer reproduces the layout Xcode itself writes — tab indentation, per-isa object sections in sorted order, single-line build-file entries, and derived reference comments (`13B07F86… /* AppDelegate.swift in Sources */`) — so diffs against Xcode-saved projects stay minimal and Xcode does not rewrite the file on next save.
-- **Round-trip faithful.** Parse → build is byte-identical for Xcode-canonical documents and a fixed point for everything else. Lexical subtleties that plain number conversion would destroy — leading-zero values like `0755`, trailing-zero versions like `5.0`, digit runs longer than the double-precision safe range — are preserved as strings by design.
+- **Xcode-canonical output.** The serializer reproduces the layout Xcode itself writes (tab indentation, per-isa object sections in sorted order, single-line build-file entries, and derived reference comments like `13B07F86… /* AppDelegate.swift in Sources */`), so diffs against Xcode-saved projects stay minimal and Xcode does not rewrite the file on next save.
+- **Round-trip faithful.** Parse → build is byte-identical for Xcode-canonical documents and a fixed point for everything else. Lexical subtleties that plain number conversion would destroy (leading-zero values like `0755`, trailing-zero versions like `5.0`, digit runs longer than the double-precision safe range) are preserved as strings by design.
 - **Loud failure modes.** Malformed documents fail with a typed error carrying line and column; unrepresentable values (`null`, booleans, non-finite numbers) fail with the exact path of the offending value. Nothing is silently dropped.
 
 ## Install
@@ -83,11 +83,11 @@ try {
 }
 ```
 
-Booleans are rejected on purpose: the format has no boolean notation — Xcode models flags as the strings `"YES"` and `"NO"` — so writing one would produce a value Xcode misreads.
+Booleans are rejected on purpose. The format has no boolean notation (Xcode models flags as the strings `"YES"` and `"NO"`), so writing one would produce a value Xcode misreads.
 
 ## Performance
 
-`rork-xcode` is measured against the pbxproj parsers on npm — [`@bacons/xcode`](https://www.npmjs.com/package/@bacons/xcode) (its `/json` parse/build entry point) and [`xcode`](https://www.npmjs.com/package/xcode) (the long-standing package used by native build tooling) — on three documents: two real Xcode-written projects from the test suite and a deterministically generated five-target app with 800 source files. It is the fastest at both operations on every document, with zero dependencies.
+`rork-xcode` is measured against the pbxproj parsers on npm, [`@bacons/xcode`](https://www.npmjs.com/package/@bacons/xcode) (its `/json` parse/build entry point) and [`xcode`](https://www.npmjs.com/package/xcode) (the long-standing package used by native build tooling), on three documents: two real Xcode-written projects from the test suite and a deterministically generated five-target app with 800 source files. It is the fastest at both operations on every document, with zero dependencies.
 
 <p align="center">
   <img src="assets/performance.svg" alt="Benchmark chart comparing rork-xcode with the @bacons/xcode and xcode packages. Bars show time relative to rork-xcode as the geometric mean over three project documents. Parsing, @bacons/xcode takes 1.3 times as long and xcode 21 times. Building, xcode takes 1.6 times as long and @bacons/xcode 9 times." width="880" />
@@ -113,9 +113,9 @@ Measured on an Apple M5 Max, Node.js 24, single thread, with `@bacons/xcode` 1.0
 
 ## Verification
 
-- The committed fixture corpus spans project generations from Xcode 3 to Xcode 16 — synchronized folders with both exception-set kinds, classic groups, variant groups, aggregate and legacy targets, reference proxies, build rules, Swift packages, and a ~100 KiB multiplatform framework project — captured from real projects with identifiers neutralized.
+- The committed fixture corpus spans project generations from Xcode 3 to Xcode 16, captured from real projects with identifiers neutralized: synchronized folders with both exception-set kinds, classic groups, variant groups, aggregate and legacy targets, reference proxies, build rules, Swift packages, and a ~100 KiB multiplatform framework project.
 - Documents already in current Xcode's layout must round-trip byte for byte; documents from other tool generations must normalize to a byte-stable fixed point with unchanged values.
-- On macOS, the suite cross-validates every fixture and its rebuilt form with `plutil`, Apple's own property list parser — the empirical ground truth for what Apple tooling accepts.
+- On macOS, the suite cross-validates every fixture and its rebuilt form with `plutil`, Apple's own property list parser and the empirical ground truth for what Apple tooling accepts.
 - A corpus sweep (`pnpm corpus`) walks every Xcode project on the machine, verifies each one parses and reaches a byte-stable fixed point, and cross-validates a sample of parsed values against plutil's own reading.
 - CI runs the full gate on Linux and macOS, and executes the built artifact on the oldest supported Node to enforce the `engines` floor.
 

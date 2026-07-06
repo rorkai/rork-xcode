@@ -1,8 +1,8 @@
 /**
  * Inline reference comments for `project.pbxproj` output.
  *
- * Xcode annotates every object reference with a display comment —
- * `13B07F861A680F5B00A75B9A /* AppDelegate.swift in Sources *​/` — derived
+ * Xcode annotates every object reference with a display comment, as in
+ * `13B07F861A680F5B00A75B9A /* AppDelegate.swift in Sources *​/`, derived
  * from the referenced object's name, its container, or its role. The
  * comments carry no semantic weight, but emitting them keeps documents
  * diffable against what Xcode writes, so this module reproduces the

@@ -1,6 +1,6 @@
 /**
  * Cross-library benchmark comparing rork-xcode with the pbxproj packages on
- * npm — @bacons/xcode (its `/json` parse/build entry point) and xcode (the
+ * npm: @bacons/xcode (its `/json` parse/build entry point) and xcode (the
  * long-standing package used by native build tooling). Run it with
  * `pnpm bench:compare`, which builds first so the measured artifact is the
  * published one.
@@ -8,7 +8,7 @@
  * Fixtures are the two real Xcode-written projects from the test suite plus
  * a deterministically generated large app. The generated document is
  * serialized by this library's writer, whose byte-for-byte agreement with
- * Xcode's own layout is enforced by the golden round-trip tests — so every
+ * Xcode's own layout is enforced by the golden round-trip tests, so every
  * library parses the same Xcode-canonical text.
  *
  * Each operation runs as interleaved round-robin batches (library A, B, C,
@@ -78,8 +78,8 @@ const id = (n: number): string => `AA${n.toString(16).toUpperCase().padStart(20,
 /**
  * A deterministically generated app project: five targets of 160 sources
  * each, per-file build settings on a slice of them, framework and resource
- * phases, groups, and per-target build configurations — the object mix and
- * uuid density of a mature production project.
+ * phases, groups, and per-target build configurations. This matches the
+ * object mix and uuid density of a mature production project.
  */
 function generateLargeProject(): PbxprojObject {
   let nextId = 0;
@@ -330,7 +330,7 @@ for (const [name, text] of Object.entries(fixtures)) {
     ],
   ];
 
-  console.log(`\n=== ${name} — ${(text.length / 1024).toFixed(0)} KiB ===`);
+  console.log(`\n=== ${name} (${(text.length / 1024).toFixed(0)} KiB) ===`);
   for (const [operation, entries] of operations) {
     const results = compare(entries);
     const best = Math.min(...results.map(([, ns]) => ns));

@@ -29,8 +29,8 @@ const BYTE_EXACT_FIXTURES = [
  * Documents written by other generations of tooling whose layout differs
  * from current Xcode's (multi-line empty dictionaries, isa-only exception
  * comments, unsectioned objects). They must normalize into the canonical
- * layout — reaching a byte-stable fixed point with unchanged values —
- * rather than reproduce their original bytes.
+ * layout, reaching a byte-stable fixed point with unchanged values, rather
+ * than reproduce their original bytes.
  *
  * - legacy-aggregate-cocoa: ancient real-world project (identifiers
  *   neutralized) with aggregate and legacy targets, reference proxies into

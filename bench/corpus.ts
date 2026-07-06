@@ -1,6 +1,6 @@
 /**
  * Real-world corpus sweep. Walks directories full of Xcode projects the
- * machine actually has — checkouts, templates, generated apps — parses every
+ * machine actually has (checkouts, templates, generated apps), parses every
  * `project.pbxproj` with this library, and cross-validates a sample against
  * `plutil`, Apple's own property list parser. This is the accuracy audit the
  * committed fixtures cannot provide, and it doubles as a byte-fidelity
@@ -198,14 +198,14 @@ for (const path of paths) {
       outcome = "canonicalized";
     } else {
       outcome = "unstable";
-      findings.push(`${path} — parse/build cycle is not a fixed point`);
+      findings.push(`${path}: parse/build cycle is not a fixed point`);
     }
     parsed.push({ path, rebuilt, value });
   } catch (error) {
     if (await plutilAccepts(path)) {
       outcome = "parse-failure";
       const message = error instanceof PbxprojParseError ? error.message : String(error);
-      findings.push(`${path} — plutil accepts, we fail with ${message}`);
+      findings.push(`${path}: plutil accepts, we fail with ${message}`);
     } else {
       outcome = "invalid-per-plutil";
     }
@@ -233,10 +233,10 @@ for (const file of differentialSample) {
     if (JSON.stringify(normalize(file.value)) === JSON.stringify(normalize(parsePlist(stdout)))) {
       agreed += 1;
     } else {
-      findings.push(`${file.path} — parsed value disagrees with plutil's reading`);
+      findings.push(`${file.path}: parsed value disagrees with plutil's reading`);
     }
   } catch (error) {
-    findings.push(`${file.path} — plutil's xml1 output failed to parse, ${String(error)}`);
+    findings.push(`${file.path}: plutil xml1 output failed to parse, ${String(error)}`);
   }
 }
 
@@ -254,4 +254,4 @@ if (findings.length > 0) {
   }
   process.exit(1);
 }
-console.log("\nno findings — every readable project parses, round-trips stably, and agrees with plutil");
+console.log("\nno findings: every readable project parses, round-trips stably, and agrees with plutil");

@@ -85,7 +85,7 @@ describe("unquoted literal interpretation", () => {
 
   it("keeps every lexical form a number cannot reproduce as a string", () => {
     expect(parsePbxproj("{ v = 1.0.0; }")).toEqual({ v: "1.0.0" });
-    // A bare-dot decimal converts to 0.5, which prints back as "0.5" — a
+    // A bare-dot decimal converts to 0.5, which prints back as "0.5", a
     // different byte sequence, so the literal stays a string.
     expect(parsePbxproj("{ v = .5; }")).toEqual({ v: ".5" });
     expect(parsePbxproj("{ v = 5.; }")).toEqual({ v: "5." });

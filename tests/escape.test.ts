@@ -31,8 +31,9 @@ test("decodes octal escapes, ASCII range directly", () => {
 });
 
 test("maps octal escapes at or above 0x80 through the NeXTSTEP character set", () => {
-  // 0o200 = 0x80 → no-break space; 0o341 = 0xE1 → Æ. Latin-1 would give a
-  // control character and á respectively — the mapping is the difference.
+  // 0o200 = 0x80 decodes to a no-break space and 0o341 = 0xE1 to Æ. Latin-1
+  // would give a control character and á respectively; the NeXTSTEP mapping
+  // is the difference under test.
   expect(parseValue(String.raw`"\200"`)).toBe("\u00A0");
   expect(parseValue(String.raw`"\341"`)).toBe("\u00C6");
 });

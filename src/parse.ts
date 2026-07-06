@@ -18,8 +18,8 @@ import type { PbxprojObject, PbxprojValue } from "./types";
  *
  * A 256-entry lookup table keyed by code unit keeps classification to a
  * single array read in the hot loop. Non-ASCII units index past the table
- * and read `undefined`, which is correctly falsy — non-ASCII text only
- * appears inside quoted strings.
+ * and read `undefined`, which is correctly falsy, because non-ASCII text
+ * only appears inside quoted strings.
  */
 const IS_LITERAL_CHAR: Uint8Array = (() => {
   const table = new Uint8Array(256);
@@ -140,11 +140,11 @@ class Parser {
   }
 
   /**
-   * Skips one comment whose `/` sits at `pos`, returning the position after
-   * it — or `pos` unchanged when the slash does not open a comment.
+   * Skips one comment whose `/` sits at `pos` and returns the position
+   * after it, or `pos` unchanged when the slash does not open a comment.
    *
    * Comment bodies are jumped over with `indexOf` rather than scanned per
-   * character — reference comments make up a sizable share of a canonical
+   * character. Reference comments make up a sizable share of a canonical
    * document's bytes, and `indexOf` uses the engine's vectorized search.
    */
   private skipComment(pos: number): number {
@@ -257,7 +257,7 @@ class Parser {
    * current position.
    *
    * Whitespace between digits is allowed (Xcode writes `<AB CD>`), and the
-   * digit count must be even — Apple's parser rejects odd counts, and
+   * digit count must be even: Apple's parser rejects odd counts, and
    * padding would guess a byte.
    */
   readData(): Uint8Array {
@@ -353,7 +353,7 @@ class Parser {
 
   /**
    * Parses a `( item, item, ... )` array; the `(` is at the current
-   * position. A trailing comma before `)` is allowed — Xcode writes one
+   * position. A trailing comma before `)` is allowed; Xcode writes one
    * after every item.
    */
   parseArray(): PbxprojValue[] {
@@ -421,11 +421,12 @@ class Parser {
  *
  * Numeric-looking candidates convert under a single print-back rule: the
  * literal becomes a number exactly when the number formats back to the
- * identical text. Everything the conversion would reshape — leading zeros
- * (`0755`), trailing-zero decimals (`5.0`), bare-dot decimals (`.5`),
- * negative zero, digit runs beyond double precision — therefore stays a
- * string, so a parse → build cycle cannot change a single byte of any
- * scalar. See the module documentation of `types.ts` for the value model.
+ * identical text. Any literal the conversion would reshape stays a string,
+ * so a parse and build cycle cannot change a single byte of any scalar.
+ * That covers leading zeros like `0755`, trailing-zero decimals like `5.0`,
+ * bare-dot decimals like `.5`, negative zero, and digit runs beyond double
+ * precision. See the module documentation of `types.ts` for the value
+ * model.
  */
 function interpretLiteral(literal: string): PbxprojValue {
   const first = literal.charCodeAt(0);
@@ -436,9 +437,10 @@ function interpretLiteral(literal: string): PbxprojValue {
   // A numeric candidate is digits with at most one dot, plus an optional
   // leading '-'; anything else is a plain string. The integer value
   // accumulates in the same pass, so the common case needs no second scan.
+  const digitsStart = first === CODE_MINUS ? 1 : 0;
   let dots = 0;
   let integer = 0;
-  for (let i = first === CODE_MINUS ? 1 : 0; i < literal.length; i++) {
+  for (let i = digitsStart; i < literal.length; i++) {
     const code = literal.charCodeAt(i);
     if (isDigit(code)) {
       integer = integer * 10 + (code - CODE_ZERO);
@@ -449,16 +451,20 @@ function interpretLiteral(literal: string): PbxprojValue {
     }
   }
 
-  // Unsigned digit runs without a leading zero and at most 15 digits are
-  // exact in a double and print back identically by construction — fewer
-  // digits than double precision, no notation changes in range.
-  if (dots === 0 && first !== CODE_MINUS && literal.length <= 15 && (first !== CODE_ZERO || literal.length === 1)) {
-    return integer;
+  // Integers of at most 15 digits without a leading zero satisfy the
+  // print-back rule by construction: they are exact in a double, well
+  // inside fixed notation range, and reformat to the same digits. Only
+  // negative zero would reformat (to "0"), so it falls through.
+  if (dots === 0 && literal.length - digitsStart <= 15) {
+    const leading = literal.charCodeAt(digitsStart);
+    if ((leading !== CODE_ZERO || literal.length - digitsStart === 1) && !(integer === 0 && digitsStart === 1)) {
+      return digitsStart === 1 ? -integer : integer;
+    }
   }
 
-  // The remaining shapes — decimals, signed values, leading zeros, long
-  // runs — are rare, so the print-back rule is applied literally: convert
-  // exactly when the number formats back to the identical text.
+  // What remains is rare in real documents: decimals, leading zeros, and
+  // runs beyond double precision. For these the print-back rule is applied
+  // literally, since it is the exact statement of the conversion contract.
   const value = Number(literal);
   return String(value) === literal ? value : literal;
 }
@@ -472,8 +478,8 @@ function interpretLiteral(literal: string): PbxprojValue {
  * values.
  *
  * @param text Source text of the document.
- * @returns The document's root value — for real project files, the root
- *   dictionary with `objects`, `rootObject`, and version fields.
+ * @returns The document's root value. For real project files this is the
+ *   root dictionary with `objects`, `rootObject`, and version fields.
  * @throws PbxprojParseError when the document is malformed; the error
  *   carries the line and column of the failure.
  */
