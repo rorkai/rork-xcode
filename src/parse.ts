@@ -434,27 +434,31 @@ function interpretLiteral(literal: string): PbxprojValue {
   }
 
   // A numeric candidate is digits with at most one dot, plus an optional
-  // leading '-'; anything else is a plain string.
+  // leading '-'; anything else is a plain string. The integer value
+  // accumulates in the same pass, so the common case needs no second scan.
   let dots = 0;
+  let integer = 0;
   for (let i = first === CODE_MINUS ? 1 : 0; i < literal.length; i++) {
     const code = literal.charCodeAt(i);
-    if (code === CODE_DOT) {
-      if (dots === 1) {
-        return literal;
-      }
+    if (isDigit(code)) {
+      integer = integer * 10 + (code - CODE_ZERO);
+    } else if (code === CODE_DOT && dots === 0) {
       dots = 1;
-    } else if (!isDigit(code)) {
+    } else {
       return literal;
     }
   }
 
   // Unsigned digit runs without a leading zero and at most 15 digits are
-  // exact in a double and print back without reformatting by construction,
-  // so the common integer case skips the String() materialization below.
+  // exact in a double and print back identically by construction — fewer
+  // digits than double precision, no notation changes in range.
   if (dots === 0 && first !== CODE_MINUS && literal.length <= 15 && (first !== CODE_ZERO || literal.length === 1)) {
-    return Number(literal);
+    return integer;
   }
 
+  // The remaining shapes — decimals, signed values, leading zeros, long
+  // runs — are rare, so the print-back rule is applied literally: convert
+  // exactly when the number formats back to the identical text.
   const value = Number(literal);
   return String(value) === literal ? value : literal;
 }
