@@ -1,0 +1,9 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    // Benchmarks run on the development toolchain, not the library's ES2022
+    // floor, so newer standard-library methods are available to them.
+    "lib": ["ES2023"]
+  },
+  "include": ["."]
+}

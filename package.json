@@ -1,0 +1,76 @@
+{
+  "name": "rork-xcode",
+  "version": "0.1.0",
+  "description": "Zero-dependency Xcode project (pbxproj) parser and builder that runs identically in every JavaScript runtime",
+  "keywords": [
+    "apple",
+    "builder",
+    "parser",
+    "pbxproj",
+    "property-list",
+    "xcode",
+    "xcodeproj",
+    "zero-dependency"
+  ],
+  "homepage": "https://github.com/rorkai/rork-xcode#readme",
+  "bugs": {
+    "url": "https://github.com/rorkai/rork-xcode/issues"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rorkai/rork-xcode.git"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p bench",
+    "lint": "oxlint",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check .",
+    "checks": "pnpm build && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
+    "bench:compare": "pnpm build && node bench/compare.ts",
+    "corpus": "pnpm build && node bench/corpus.ts",
+    "prepublishOnly": "pnpm checks"
+  },
+  "devDependencies": {
+    "@bacons/xcode": "1.0.0-alpha.33",
+    "@types/node": "^20.19.43",
+    "eslint": "8.57.1",
+    "eslint-plugin-perfectionist": "5.9.1",
+    "oxfmt": "0.57.0",
+    "oxlint": "1.72.0",
+    "rork-plist": "^0.3.0",
+    "tsdown": "^0.22.3",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9",
+    "xcode": "3.0.1"
+  },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": ">=22.18",
+      "onFail": "error"
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.33.0"
+}
