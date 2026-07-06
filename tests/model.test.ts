@@ -216,9 +216,9 @@ describe("scaffolding an extension target", () => {
     expect(project.rootProject.mainGroup()?.childIds).toContain(syncGroup.id);
   });
 
-  it("is idempotent for dependencies and embedding", () => {
+  it("is idempotent for dependencies, embedding, and synchronized folders", () => {
     const project = openApp();
-    const { host, widget } = scaffoldWidget(project);
+    const { host, widget, syncGroup } = scaffoldWidget(project);
 
     const dependencyCount = (host.properties["dependencies"] as string[]).length;
     host.addDependency(widget);
@@ -228,6 +228,9 @@ describe("scaffolding an extension target", () => {
     assert(phase);
     expect(host.embed(widget)).toBe(phase);
     expect(phase.buildFileIds).toHaveLength(1);
+
+    expect(widget.addSyncGroup("DemoWidget")).toBe(syncGroup);
+    expect(widget.syncGroupPaths()).toEqual(["DemoWidget"]);
   });
 
   it("produces deterministic output across identical runs", () => {
@@ -248,7 +251,7 @@ describe("scaffolding an extension target", () => {
     expect(text).toContain("/* Begin PBXTargetDependency section */");
     // Generated ids carry the deterministic XX...XX shape and render with
     // derived reference comments.
-    expect(text).toMatch(/XX[0-9A-F]{20}XX \/\* DemoWidget\.appex \*\//);
+    expect(text).toMatch(/XX[0-9A-F]{20}XX \/\* DemoWidget\.appex \*\//u);
 
     const reparsed = XcodeProject.parse(text);
     const widget = reparsed.findTarget("DemoWidget");

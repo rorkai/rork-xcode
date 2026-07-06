@@ -450,7 +450,15 @@ export class XcodeProject {
       return undefined;
     }
 
+    // A malformed document can link groups into a cycle; visited ids bound
+    // the walk to each group once.
+    const visited = new Set<string>();
     const search = (group: Group, prefix: string): XcodeObject | undefined => {
+      if (visited.has(group.id)) {
+        return undefined;
+      }
+      visited.add(group.id);
+
       for (const childId of group.childIds) {
         const child = this.get(childId);
         if (child == null) {

@@ -290,13 +290,22 @@ export class NativeTarget extends XcodeObject {
   /**
    * Creates a file-system-synchronized folder for an on-disk path, links it
    * to this target, and registers it in the project's main group so Xcode
-   * shows it in the navigator.
+   * shows it in the navigator. When the target already links a folder with
+   * the same path, that folder is returned instead, so re-running a
+   * scaffold step cannot duplicate groups.
    *
    * @param path Folder path relative to the project root, for example the
    *   target's name.
-   * @returns The view of the created group.
+   * @returns The view of the target's synchronized folder for the path.
    */
   addSyncGroup(path: string): SyncRootGroup {
+    for (const id of stringItems(this.properties["fileSystemSynchronizedGroups"])) {
+      const existing = this.project.get(id);
+      if (existing instanceof SyncRootGroup && existing.path === path) {
+        return existing;
+      }
+    }
+
     const group = this.project.add(
       Isa.fileSystemSynchronizedRootGroup,
       {
