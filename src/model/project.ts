@@ -15,16 +15,17 @@
 import { buildPbxproj } from "../build";
 import { XcodeModelError } from "../errors";
 import { parsePbxproj } from "../parse";
-import type { PbxprojObject, PbxprojValue } from "../types";
 import { generateObjectId } from "../uuid";
 import { pruneOrphanObjects, validateProject, type ProjectIssue } from "./doctor";
 import { DEPLOYMENT_TARGET_KEY, Isa, PRODUCT_FILE_INFO, ProductType, type ApplePlatform } from "./isa";
 import { XcodeObject } from "./object";
 import { BuildPhase, Group, SyncRootGroup } from "./objects";
-import type { RootProjectProperties } from "./properties";
 import { defaultConfigurationSettingsOf } from "./settings";
 import { NativeTarget } from "./target";
 import { asDictionary, asString, ensureArray, stringItems } from "./values";
+
+import type { PbxprojObject, PbxprojValue } from "../types";
+import type { RootProjectProperties } from "./properties";
 
 /**
  * The `PBXProject` object at the document root: the container that owns

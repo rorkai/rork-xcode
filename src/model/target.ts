@@ -10,13 +10,14 @@
  * @module
  */
 
-import type { PbxprojObject } from "../types";
 import { embedDestinationFor, Isa, ProductType } from "./isa";
 import { XcodeObject } from "./object";
 import { BuildPhase, SyncRootGroup } from "./objects";
-import type { NativeTargetProperties } from "./properties";
 import { configurationsOf, defaultConfigurationSettingsOf } from "./settings";
 import { asDictionary, asString, ensureArray, stringItems } from "./values";
+
+import type { PbxprojObject } from "../types";
+import type { NativeTargetProperties } from "./properties";
 
 /**
  * A native target: an application, extension, or other product the project

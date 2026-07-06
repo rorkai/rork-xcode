@@ -11,9 +11,10 @@
 
 import { FILE_TYPE_BY_EXTENSION, Isa } from "./isa";
 import { XcodeObject } from "./object";
+import { ensureArray, stringItems } from "./values";
+
 import type { BuildPhaseProperties, GroupProperties, SyncRootGroupProperties } from "./properties";
 import type { NativeTarget } from "./target";
-import { ensureArray, stringItems } from "./values";
 
 /**
  * A `PBXGroup`: a folder in Xcode's navigator holding references to files

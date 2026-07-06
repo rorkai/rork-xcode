@@ -10,13 +10,8 @@
  *
  * - the document parses;
  * - a parse, build, parse cycle reaches a byte-stable fixed point;
- * - the object model's validator runs (structural issues found in the wild
- *   are reported as statistics, not failures);
- * - where a main application target resolves, the model applies a
- *   canonical edit sequence (a setting write, a probe extension with
- *   dependency and embedding, then a full teardown) and the mutated and
- *   restored documents must stay byte-stable fixed points, with a slice of
- *   mutated output re-checked through plutil;
+ * - the object model can validate and edit the project (see the model
+ *   exercise below);
  * - the parsed values agree with plutil's own reading of the document
  *   (sampled; OpenStep scalars are untyped, so values compare as text).
  *
@@ -229,13 +224,13 @@ for (const path of paths) {
   counts.set(outcome, (counts.get(outcome) ?? 0) + 1);
 }
 
-// Model exercise: on every parsed project, run the validator, and where a
-// main application target resolves, apply the canonical edit sequence
-// (write a setting, scaffold a probe extension with dependency and
-// embedding, then tear it down) and require the mutated document to stay a
-// byte-stable fixed point. Structural problems in the wild are reported as
-// statistics, not findings; only unexpected model errors and instability
-// fail the run.
+// Model exercise. Every parsed project runs through validate(); issue
+// counts are reported as statistics, because real projects are often
+// imperfect and that is not our bug. Projects with an app target also get
+// a probe edit: write a setting, add an extension target, embed it, then
+// remove it all again. The document must stay byte-stable after the edit
+// and after the teardown. Only unexpected errors and instability fail the
+// run.
 console.log("exercising the object model on every parsed project...");
 const issueCounts = new Map<string, number>();
 let modelExercised = 0;

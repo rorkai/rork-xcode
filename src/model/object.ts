@@ -10,9 +10,10 @@
  * @module
  */
 
+import { asString } from "./values";
+
 import type { PbxprojObject, PbxprojValue } from "../types";
 import type { XcodeProject } from "./project";
-import { asString } from "./values";
 
 /**
  * A typed handle on one object of the document.

@@ -10,9 +10,10 @@
  * @module
  */
 
+import { asDictionary } from "./values";
+
 import type { PbxprojObject, PbxprojValue } from "../types";
 import type { XcodeProject } from "./project";
-import { asDictionary } from "./values";
 
 /**
  * Object properties that hold a single reference to another object of the
