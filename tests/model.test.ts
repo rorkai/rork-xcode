@@ -480,21 +480,26 @@ describe("removal", () => {
 
   it("removes the target's own dependencies and their proxies", () => {
     const project = openApp();
-    const { widget } = scaffoldWidget(project);
-    const helper = project.addNativeTarget({ name: "HelperExt", productType: ProductType.appExtension });
-    widget.addDependency(helper);
-
     const dependencyCount = () => [...project.objects()].filter(([, view]) => view.isa === Isa.targetDependency).length;
     const proxyCount = () => [...project.objects()].filter(([, view]) => view.isa === Isa.containerItemProxy).length;
 
-    // Two dependency pairs exist: host -> widget and widget -> helper.
-    expect(dependencyCount()).toBe(2);
-    expect(proxyCount()).toBe(2);
+    // The fixture's test targets already depend on the app; measure from
+    // that baseline.
+    const baselineDependencies = dependencyCount();
+    const baselineProxies = proxyCount();
+
+    // Wire two pairs around the widget: the host depends on it, and it
+    // depends on a helper extension.
+    const { widget } = scaffoldWidget(project);
+    const helper = project.addNativeTarget({ name: "HelperExt", productType: ProductType.appExtension });
+    widget.addDependency(helper);
+    expect(dependencyCount()).toBe(baselineDependencies + 2);
+    expect(proxyCount()).toBe(baselineProxies + 2);
 
     // Removing the widget tears down both directions; nothing dangles.
     project.removeTarget(widget);
-    expect(dependencyCount()).toBe(0);
-    expect(proxyCount()).toBe(0);
+    expect(dependencyCount()).toBe(baselineDependencies);
+    expect(proxyCount()).toBe(baselineProxies);
     expect(project.findTarget("HelperExt")).toBeDefined();
   });
 
