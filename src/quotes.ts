@@ -12,7 +12,7 @@
  * The writer's unquoted-safe alphabet. The `+` also rejects the empty
  * string, which must render as `""`.
  */
-const UNQUOTED_SAFE_PATTERN = /^[A-Za-z0-9_$/:.]+$/;
+const UNQUOTED_SAFE_PATTERN = /^[A-Za-z0-9_$/:.]+$/u;
 
 /**
  * Whether the value can render without quotes: every character is in the
