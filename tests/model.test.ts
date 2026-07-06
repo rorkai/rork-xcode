@@ -470,6 +470,59 @@ describe("removal", () => {
     expect(referrerIsas).toContain(Isa.project);
   });
 
+  it("rejects targets that belong to another project", () => {
+    const project = openApp();
+    const other = openApp();
+    const foreign = other.findMainAppTarget("ios");
+    assert(foreign);
+    expect(() => project.removeTarget(foreign)).toThrow(XcodeModelError);
+  });
+
+  it("removes the target's own dependencies and their proxies", () => {
+    const project = openApp();
+    const { widget } = scaffoldWidget(project);
+    const helper = project.addNativeTarget({ name: "HelperExt", productType: ProductType.appExtension });
+    widget.addDependency(helper);
+
+    const dependencyCount = () => [...project.objects()].filter(([, view]) => view.isa === Isa.targetDependency).length;
+    const proxyCount = () => [...project.objects()].filter(([, view]) => view.isa === Isa.containerItemProxy).length;
+
+    // Two dependency pairs exist: host -> widget and widget -> helper.
+    expect(dependencyCount()).toBe(2);
+    expect(proxyCount()).toBe(2);
+
+    // Removing the widget tears down both directions; nothing dangles.
+    project.removeTarget(widget);
+    expect(dependencyCount()).toBe(0);
+    expect(proxyCount()).toBe(0);
+    expect(project.findTarget("HelperExt")).toBeDefined();
+  });
+
+  it("strips references nested inside array elements", () => {
+    const project = XcodeProject.fromDocument({
+      objects: {
+        A1: { isa: "PBXFileReference", path: "App.swift", sourceTree: "<group>" },
+        B1: {
+          isa: "XCBuildConfiguration",
+          buildSettings: {
+            // A dictionary inside an array inside the settings dictionary;
+            // reference lists are normally flat, but the scrub must reach
+            // any depth the value model allows.
+            CUSTOM: [{ ref: "A1" }, "A1", "keep"],
+          },
+          name: "Debug",
+        },
+      },
+      rootObject: "P1",
+    });
+
+    project.removeObject("A1");
+    const configuration = project.get("B1");
+    assert(configuration);
+    const settings = configuration.properties["buildSettings"] as Record<string, unknown>;
+    expect(settings["CUSTOM"]).toEqual([{}, "keep"]);
+  });
+
   it("removeObject strips references everywhere", () => {
     const project = openApp();
     const app = project.findMainAppTarget("ios");

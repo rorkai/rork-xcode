@@ -15,7 +15,7 @@
 import { buildPbxproj } from "../build";
 import { XcodeModelError } from "../errors";
 import { parsePbxproj } from "../parse";
-import type { PbxprojObject } from "../types";
+import type { PbxprojObject, PbxprojValue } from "../types";
 import { generateObjectId } from "../uuid";
 import { DEPLOYMENT_TARGET_KEY, Isa, PRODUCT_FILE_INFO, ProductType, type ApplePlatform } from "./isa";
 import { XcodeObject } from "./object";
@@ -527,14 +527,23 @@ export class XcodeProject {
    * Removes a target and everything that exists only for its sake: its
    * build phases and their build files, its configuration list and
    * configurations, its product reference and the build files embedding
-   * it, dependency objects (and their container proxies) other targets
-   * hold on it, its membership exception sets, and synchronized folders no
+   * it, dependency objects and container proxies in both directions
+   * (other targets' dependencies on it, and its own dependencies on
+   * others), its membership exception sets, and synchronized folders no
    * remaining target links.
    *
    * On-disk sources are untouched; the removal is document-only, like
    * deleting a target in Xcode and keeping its folder.
+   *
+   * @throws XcodeModelError when the target belongs to another project,
+   *   since removing by another document's ids would tear down unrelated
+   *   objects that happen to share them.
    */
   removeTarget(target: NativeTarget): void {
+    if (target.project !== this) {
+      throw new XcodeModelError("Cannot remove a target that belongs to another project");
+    }
+
     const ownedIds = new Set<string>();
 
     for (const phase of target.buildPhases()) {
@@ -558,6 +567,16 @@ export class XcodeProject {
         ownedIds.add(buildFile.id);
       }
       ownedIds.add(product.id);
+    }
+
+    // The target's own dependencies on other targets, with their proxies;
+    // nothing else references them once the target disappears.
+    for (const dependency of target.dependencies()) {
+      const proxyId = dependency.getString("targetProxy");
+      if (proxyId != null) {
+        ownedIds.add(proxyId);
+      }
+      ownedIds.add(dependency.id);
     }
 
     // Dependencies other targets hold on this one, with their proxies.
@@ -674,54 +693,87 @@ function joinPath(prefix: string, segment: string): string {
 }
 
 /**
- * Whether an object's properties reference the id anywhere: as a string
- * value, inside an array, or inside a nested dictionary (as key or value).
+ * Whether a value references the id anywhere in its structure: a string
+ * equal to it, an array containing it at any depth, or a dictionary
+ * carrying it as a key or somewhere in its values.
+ */
+function valueReferences(value: PbxprojValue | undefined, id: string): boolean {
+  if (typeof value === "string") {
+    return value === id;
+  }
+  if (Array.isArray(value)) {
+    return value.some((item) => valueReferences(item, id));
+  }
+  const nested = asDictionary(value);
+  if (nested != null) {
+    return id in nested || objectReferences(nested, id);
+  }
+  return false;
+}
+
+/**
+ * Whether an object's properties reference the id anywhere; see
+ * {@link valueReferences} for the shapes considered.
  */
 function objectReferences(properties: PbxprojObject, id: string): boolean {
   for (const key of Object.keys(properties)) {
-    const value = properties[key];
-    if (typeof value === "string") {
-      if (value === id) {
-        return true;
-      }
-    } else if (Array.isArray(value)) {
-      if (value.includes(id)) {
-        return true;
-      }
-    } else if (asDictionary(value) != null) {
-      const nested = value as PbxprojObject;
-      if (id in nested || objectReferences(nested, id)) {
-        return true;
-      }
+    if (valueReferences(properties[key], id)) {
+      return true;
     }
   }
   return false;
 }
 
 /**
- * Strips every reference to the id from an object's properties: string
- * properties naming it are deleted, arrays drop it, and nested
- * dictionaries drop entries keyed by it and recurse into their values.
+ * Strips every reference to the id inside a value and returns the value to
+ * keep: strings equal to the id become `undefined`, arrays drop matching
+ * items at any depth, and dictionaries drop entries keyed by it and
+ * recurse into their values.
+ */
+function stripValue(value: PbxprojValue, id: string): PbxprojValue | undefined {
+  if (typeof value === "string") {
+    return value === id ? undefined : value;
+  }
+  if (Array.isArray(value)) {
+    let changed = false;
+    const kept: PbxprojValue[] = [];
+    for (const item of value) {
+      const stripped = stripValue(item, id);
+      if (stripped == null || stripped !== item) {
+        changed = true;
+      }
+      if (stripped != null) {
+        kept.push(stripped);
+      }
+    }
+    return changed ? kept : value;
+  }
+  const nested = asDictionary(value);
+  if (nested != null) {
+    if (id in nested) {
+      delete nested[id];
+    }
+    stripReferences(nested, id);
+  }
+  return value;
+}
+
+/**
+ * Strips every reference to the id from an object's properties; see
+ * {@link stripValue} for the shapes handled. String properties naming the
+ * id are deleted rather than left empty.
  */
 function stripReferences(properties: PbxprojObject, id: string): void {
   for (const key of Object.keys(properties)) {
     const value = properties[key];
-    if (typeof value === "string") {
-      if (value === id) {
-        delete properties[key];
-      }
-    } else if (Array.isArray(value)) {
-      if (value.includes(id)) {
-        properties[key] = value.filter((item) => item !== id);
-      }
-    } else {
-      const nested = asDictionary(value);
-      if (nested != null) {
-        if (id in nested) {
-          delete nested[id];
-        }
-        stripReferences(nested, id);
-      }
+    if (value == null) {
+      continue;
+    }
+    const stripped = stripValue(value, id);
+    if (stripped == null) {
+      delete properties[key];
+    } else if (stripped !== value) {
+      properties[key] = stripped;
     }
   }
 }
