@@ -405,16 +405,22 @@ export class XcodeProject {
 
   /**
    * Adds a remote Swift package reference and registers it on the project.
-   * Link its products to targets with
-   * {@link NativeTarget.addSwiftPackageProduct}.
+   * When the project already references the repository, the existing
+   * reference is returned unchanged, requirement included; adjust an
+   * existing requirement through the reference's properties. Link products
+   * to targets with {@link NativeTarget.addSwiftPackageProduct}.
    *
    * @param options.repositoryURL The package's git URL.
    * @param options.requirement The version requirement dictionary as Xcode
    *   stores it, for example
    *   `{ kind: "upToNextMajorVersion", minimumVersion: "5.0.0" }`.
-   * @returns The view of the created package reference.
+   * @returns The view of the package reference for the repository.
    */
   addSwiftPackage(options: { repositoryURL: string; requirement: Record<string, string> }): XcodeObject {
+    const existing = this.findSwiftPackage(options.repositoryURL);
+    if (existing != null) {
+      return existing;
+    }
     const reference = this.add(
       Isa.remoteSwiftPackageReference,
       { repositoryURL: options.repositoryURL, requirement: options.requirement },
@@ -438,13 +444,18 @@ export class XcodeProject {
 
   /**
    * Adds a local (path-based) Swift package reference and registers it on
-   * the project. Products link to targets the same way as remote packages,
+   * the project, returning the existing reference when the path is already
+   * registered. Products link to targets the same way as remote packages,
    * through {@link NativeTarget.addSwiftPackageProduct}.
    *
    * @param relativePath The package directory, relative to the project.
-   * @returns The view of the created package reference.
+   * @returns The view of the package reference for the path.
    */
   addLocalSwiftPackage(relativePath: string): XcodeObject {
+    const existing = this.findLocalSwiftPackage(relativePath);
+    if (existing != null) {
+      return existing;
+    }
     const reference = this.add(
       Isa.localSwiftPackageReference,
       { relativePath },

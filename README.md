@@ -138,12 +138,10 @@ folder.addMembershipExceptions(widget, ["Info.plist"]);
 ### Swift packages
 
 ```ts
-const pkg =
-  project.findSwiftPackage("https://github.com/example/example-kit") ??
-  project.addSwiftPackage({
-    repositoryURL: "https://github.com/example/example-kit",
-    requirement: { kind: "upToNextMajorVersion", minimumVersion: "2.0.0" },
-  });
+const pkg = project.addSwiftPackage({
+  repositoryURL: "https://github.com/example/example-kit",
+  requirement: { kind: "upToNextMajorVersion", minimumVersion: "2.0.0" },
+});
 
 // Wires the product dependency and its Frameworks-phase build file.
 app.addSwiftPackageProduct({ productName: "ExampleKit", packageReference: pkg });
@@ -151,7 +149,7 @@ app.addSwiftPackageProduct({ productName: "ExampleKit", packageReference: pkg })
 // Local (path-based) packages and system frameworks work the same way.
 const local = project.addLocalSwiftPackage("Packages/DesignSystem");
 app.addSwiftPackageProduct({ productName: "DesignSystem", packageReference: local });
-app.ensureSystemFramework("Messages");
+app.addSystemFramework("Messages");
 ```
 
 ### Files, groups, and phases
@@ -201,9 +199,9 @@ for (const [id, object] of project.objects()) {
 
 ### Semantics
 
+- **Two verb families.** `add*` wires something to its owner (a dependency, a package, a framework, a synchronized folder) and is idempotent: re-adding returns the existing wiring. `ensure*` returns a structural container, creating it when missing (a build phase, a group chain, the Products group). Both families can therefore run unconditionally in scaffold and repair flows.
 - **Deterministic identifiers.** New objects get ids derived from what they are (`XX` + 20 digest characters + `XX`, from an embedded hash), so programmatic edits are reproducible run to run and diffs stay minimal. Collisions within a document resolve deterministically, and identical edit sequences produce byte-identical documents.
 - **Soft reads, loud writes.** Real-world projects can be malformed, so lookups return `undefined` where a document could omit something. Operations that cannot proceed without structure (no root project object, an unknown product type, a view whose object was deleted) throw `XcodeModelError`.
-- **Idempotent wiring.** Dependencies, embed phases, package products, synchronized folders, and build files deduplicate on re-application, so scaffold and repair flows can run unconditionally.
 - **Identity-mapped views.** Two lookups of the same id return the same instance, so views compare with `===`.
 
 ## Performance

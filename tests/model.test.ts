@@ -213,6 +213,11 @@ describe("scaffolding an extension target", () => {
     expect(exceptionSet.getString("target")).toBe(widget.id);
     expect(exceptionSet.properties["membershipExceptions"]).toEqual(["Info.plist"]);
 
+    // Re-adding merges into the target's set instead of creating another.
+    expect(syncGroup.addMembershipExceptions(widget, ["Info.plist", "Secrets.plist"])).toBe(exceptionSet);
+    expect(exceptionSet.properties["membershipExceptions"]).toEqual(["Info.plist", "Secrets.plist"]);
+    expect(syncGroup.properties["exceptions"]).toHaveLength(1);
+
     // The main group shows the folder in the navigator.
     expect(project.rootProject.mainGroup()?.childIds).toContain(syncGroup.id);
   });
@@ -293,6 +298,13 @@ describe("Swift packages", () => {
       requirement: { kind: "upToNextMajorVersion", minimumVersion: "2.0.0" },
     });
     expect(project.findSwiftPackage("https://github.com/example/example-kit")).toBe(reference);
+    // Re-adding the same repository returns the existing reference.
+    expect(
+      project.addSwiftPackage({
+        repositoryURL: "https://github.com/example/example-kit",
+        requirement: { kind: "upToNextMajorVersion", minimumVersion: "9.9.9" },
+      }),
+    ).toBe(reference);
 
     const product = app.addSwiftPackageProduct({ productName: "ExampleKit", packageReference: reference });
     expect(app.addSwiftPackageProduct({ productName: "ExampleKit", packageReference: reference })).toBe(product);
@@ -313,8 +325,8 @@ describe("Swift packages", () => {
     const app = project.findMainAppTarget("ios");
     assert(app);
 
-    const reference = app.ensureSystemFramework("Messages");
-    expect(app.ensureSystemFramework("Messages")).toBe(reference);
+    const reference = app.addSystemFramework("Messages");
+    expect(app.addSystemFramework("Messages")).toBe(reference);
     expect(reference.getString("path")).toBe("System/Library/Frameworks/Messages.framework");
     expect(app.findBuildPhase(Isa.frameworksBuildPhase)?.buildFileIds).toHaveLength(1);
   });
@@ -420,6 +432,7 @@ describe("local Swift packages", () => {
     expect(project.findLocalSwiftPackage("Packages/DesignSystem")).toBeUndefined();
     const reference = project.addLocalSwiftPackage("Packages/DesignSystem");
     expect(project.findLocalSwiftPackage("Packages/DesignSystem")).toBe(reference);
+    expect(project.addLocalSwiftPackage("Packages/DesignSystem")).toBe(reference);
 
     app.addSwiftPackageProduct({ productName: "DesignSystem", packageReference: reference });
     const text = project.build();

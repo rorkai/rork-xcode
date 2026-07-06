@@ -36,10 +36,14 @@ export class Group extends XcodeObject {
 
   /**
    * Adds an existing object (a file reference or another group) to the end
-   * of the group's children.
+   * of the group's children. Adding a child the group already lists is a
+   * no-op.
    */
   addChild(child: XcodeObject): void {
-    ensureArray(this.properties, "children").push(child.id);
+    const children = ensureArray(this.properties, "children");
+    if (!children.includes(child.id)) {
+      children.push(child.id);
+    }
   }
 
   /**
@@ -209,8 +213,13 @@ export class SyncRootGroup extends XcodeObject {
 
   /**
    * Excludes files from a target's membership in this synchronized folder
-   * by creating a `PBXFileSystemSynchronizedBuildFileExceptionSet` and
-   * linking it into the group's exceptions.
+   * through a `PBXFileSystemSynchronizedBuildFileExceptionSet` linked into
+   * the group's exceptions.
+   *
+   * Xcode keeps one exception set per target and folder, so when this
+   * group already carries a set for the target, the file names merge into
+   * it instead of creating a second set; names already excluded are not
+   * duplicated.
    *
    * The standard use is keeping a scaffolded `Info.plist` from being
    * double-copied: the build already processes it through the target's
@@ -218,9 +227,25 @@ export class SyncRootGroup extends XcodeObject {
    *
    * @param target The target whose membership the exceptions restrict.
    * @param membershipExceptions File names inside the folder to exclude.
-   * @returns The view of the created exception set.
+   * @returns The view of the target's exception set for this folder.
    */
   addMembershipExceptions(target: NativeTarget, membershipExceptions: string[]): XcodeObject {
+    for (const id of stringItems(this.properties["exceptions"])) {
+      const existing = this.project.get(id);
+      if (
+        existing?.isa === Isa.fileSystemSynchronizedBuildFileExceptionSet &&
+        existing.getString("target") === target.id
+      ) {
+        const names = ensureArray(existing.properties, "membershipExceptions");
+        for (const name of membershipExceptions) {
+          if (!names.includes(name)) {
+            names.push(name);
+          }
+        }
+        return existing;
+      }
+    }
+
     const exceptionSet = this.project.add(
       Isa.fileSystemSynchronizedBuildFileExceptionSet,
       {

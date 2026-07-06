@@ -407,13 +407,14 @@ export class NativeTarget extends XcodeObject {
 
   /**
    * Links a system framework (for example `Messages`) to this target:
-   * ensures a file reference under the SDK's frameworks directory exists
-   * and that the frameworks phase carries its build file.
+   * reuses or creates the file reference under the SDK's frameworks
+   * directory and makes sure the frameworks phase carries its build file.
+   * Linking an already linked framework is a no-op.
    *
    * @param name Framework name without the `.framework` suffix.
    * @returns The view of the framework's file reference.
    */
-  ensureSystemFramework(name: string): XcodeObject {
+  addSystemFramework(name: string): XcodeObject {
     const path = `System/Library/Frameworks/${name}.framework`;
 
     let reference: XcodeObject | undefined;
