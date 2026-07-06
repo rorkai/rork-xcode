@@ -9,6 +9,21 @@
  */
 
 /**
+ * The writer's unquoted-safe alphabet, `[A-Za-z0-9_$/:.]`, as a 256-entry
+ * table. Quoting decisions scan every string value a document carries, so
+ * classification is one array read per character; non-ASCII code units
+ * index past the table and read `undefined`, which is correctly falsy.
+ */
+const IS_UNQUOTED_SAFE: Uint8Array = (() => {
+  const table = new Uint8Array(256);
+  for (let i = 0x61; i <= 0x7a; i++) table[i] = 1; // a-z
+  for (let i = 0x41; i <= 0x5a; i++) table[i] = 1; // A-Z
+  for (let i = 0x30; i <= 0x39; i++) table[i] = 1; // 0-9
+  for (const ch of "_$/:.") table[ch.charCodeAt(0)] = 1;
+  return table;
+})();
+
+/**
  * Whether every character is in the writer's unquoted-safe alphabet:
  * `[A-Za-z0-9_$/:.]`.
  *
@@ -19,17 +34,7 @@ export function isSafeUnquoted(value: string): boolean {
     return false;
   }
   for (let i = 0; i < value.length; i++) {
-    const code = value.charCodeAt(i);
-    const safe =
-      (code >= 0x61 && code <= 0x7a) || // a-z
-      (code >= 0x41 && code <= 0x5a) || // A-Z
-      (code >= 0x30 && code <= 0x39) || // 0-9
-      code === 0x5f || // _
-      code === 0x24 || // $
-      code === 0x2f || // /
-      code === 0x3a || // :
-      code === 0x2e; // .
-    if (!safe) {
+    if (IS_UNQUOTED_SAFE[value.charCodeAt(i)] !== 1) {
       return false;
     }
   }

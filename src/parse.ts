@@ -111,9 +111,9 @@ class Parser {
   /**
    * Skips whitespace and `//` / `/* *​/` comments in bulk.
    *
-   * Comment bodies are jumped over with `indexOf` rather than scanned per
-   * character — reference comments make up a sizable share of a canonical
-   * document's bytes, and `indexOf` uses the engine's vectorized search.
+   * The whitespace loop is the hottest path in the scanner and stays small
+   * enough for the engine to inline into the parse loops; comment handling
+   * lives in {@link skipComment}.
    */
   skipTrivia(): void {
     const input = this.input;
@@ -125,24 +125,10 @@ class Parser {
         pos++;
       }
 
-      if (pos >= length) break;
-
-      if (input.charCodeAt(pos) === CODE_SLASH && pos + 1 < length) {
-        const next = input.charCodeAt(pos + 1);
-        if (next === CODE_SLASH) {
-          const lineEnd = input.indexOf("\n", pos + 2);
-          pos = lineEnd === -1 ? length : lineEnd;
-          continue;
-        }
-        if (next === CODE_ASTERISK) {
-          const commentEnd = input.indexOf("*/", pos + 2);
-          if (commentEnd === -1) {
-            // Only comments before or inside the root value reach this
-            // scanner; content after the root is never read, so a trailing
-            // unterminated comment still parses (as Apple's parser does).
-            this.fail("Unterminated block comment", pos);
-          }
-          pos = commentEnd + 2;
+      if (pos < length && input.charCodeAt(pos) === CODE_SLASH) {
+        const afterComment = this.skipComment(pos);
+        if (afterComment !== pos) {
+          pos = afterComment;
           continue;
         }
       }
@@ -151,6 +137,35 @@ class Parser {
     }
 
     this.pos = pos;
+  }
+
+  /**
+   * Skips one comment whose `/` sits at `pos`, returning the position after
+   * it — or `pos` unchanged when the slash does not open a comment.
+   *
+   * Comment bodies are jumped over with `indexOf` rather than scanned per
+   * character — reference comments make up a sizable share of a canonical
+   * document's bytes, and `indexOf` uses the engine's vectorized search.
+   */
+  private skipComment(pos: number): number {
+    const input = this.input;
+    // charCodeAt returns NaN past the end, matching neither comment opener.
+    const next = input.charCodeAt(pos + 1);
+    if (next === CODE_SLASH) {
+      const lineEnd = input.indexOf("\n", pos + 2);
+      return lineEnd === -1 ? input.length : lineEnd;
+    }
+    if (next === CODE_ASTERISK) {
+      const commentEnd = input.indexOf("*/", pos + 2);
+      if (commentEnd === -1) {
+        // Only comments before or inside the root value reach this scanner;
+        // content after the root is never read, so a trailing unterminated
+        // comment still parses (as Apple's parser does).
+        this.fail("Unterminated block comment", pos);
+      }
+      return commentEnd + 2;
+    }
+    return pos;
   }
 
   /**
@@ -431,6 +446,13 @@ function interpretLiteral(literal: string): PbxprojValue {
     } else if (!isDigit(code)) {
       return literal;
     }
+  }
+
+  // Unsigned digit runs without a leading zero and at most 15 digits are
+  // exact in a double and print back without reformatting by construction,
+  // so the common integer case skips the String() materialization below.
+  if (dots === 0 && first !== CODE_MINUS && literal.length <= 15 && (first !== CODE_ZERO || literal.length === 1)) {
+    return Number(literal);
   }
 
   const value = Number(literal);
