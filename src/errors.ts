@@ -74,6 +74,26 @@ export class PbxprojParseError extends Error {
 }
 
 /**
+ * Thrown by the object model when an operation cannot proceed: the
+ * document lacks the structure the operation needs (no objects dictionary,
+ * no root project object), a view's object was removed from the document,
+ * or a creation request names a product type the model cannot scaffold.
+ *
+ * Read paths in the model return `undefined` for merely malformed data;
+ * this error marks the cases where continuing would corrupt the document
+ * or hide a programming mistake.
+ */
+export class XcodeModelError extends Error {
+  /**
+   * @param message Description of the failed operation.
+   */
+  constructor(message: string) {
+    super(message);
+    this.name = "XcodeModelError";
+  }
+}
+
+/**
  * Thrown when a value cannot be represented in a `project.pbxproj` document.
  *
  * Raised for `null`, `undefined`, booleans, bigints, functions, symbols,

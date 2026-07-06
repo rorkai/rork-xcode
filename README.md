@@ -3,7 +3,7 @@
 [![CI](https://github.com/rorkai/rork-xcode/actions/workflows/ci.yml/badge.svg)](https://github.com/rorkai/rork-xcode/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/rork-xcode)](https://www.npmjs.com/package/rork-xcode)
 
-The [fastest](#performance) zero-dependency Xcode project (`project.pbxproj`) parser and builder for any JavaScript runtime: browsers, Node.js, Bun, Electron, Cloudflare Workers, and React Native.
+The [fastest](#performance) zero-dependency Xcode project (`project.pbxproj`) parser, builder, and object model for any JavaScript runtime: browsers, Node.js, Bun, Electron, Cloudflare Workers, and React Native.
 
 ```ts
 import { parsePbxproj, buildPbxproj } from "rork-xcode";
@@ -84,6 +84,46 @@ try {
 ```
 
 Booleans are rejected on purpose. The format has no boolean notation (Xcode models flags as the strings `"YES"` and `"NO"`), so writing one would produce a value Xcode misreads.
+
+### `XcodeProject` — the object model
+
+Typed, mutable access to a parsed project: targets, build settings, build phases, dependencies, embedding, file-system-synchronized folders, and Swift packages.
+
+```ts
+import { ProductType, XcodeProject } from "rork-xcode";
+
+const project = XcodeProject.parse(pbxprojText);
+
+// Read and write build settings with project-level inheritance.
+const app = project.findMainAppTarget("ios");
+app?.setBuildSetting("MARKETING_VERSION", "1.2.0");
+
+// Scaffold a widget extension the way Xcode would.
+const widget = project.addNativeTarget({
+  name: "DemoWidget",
+  productType: ProductType.appExtension,
+  buildSettings: { PRODUCT_BUNDLE_IDENTIFIER: "com.example.app.widget" },
+});
+app?.addDependency(widget);
+app?.embed(widget);
+widget.addSyncGroup("DemoWidget").addMembershipExceptions(widget, ["Info.plist"]);
+
+// Link a Swift package product.
+const pkg = project.addSwiftPackage({
+  repositoryURL: "https://github.com/example/example-kit",
+  requirement: { kind: "upToNextMajorVersion", minimumVersion: "2.0.0" },
+});
+app?.addSwiftPackageProduct({ productName: "ExampleKit", packageReference: pkg });
+
+const text = project.build();
+```
+
+The model is a set of lightweight views over the plain parsed document. All state lives in the document itself, so model calls and direct dictionary access compose freely, and `build()` always serializes the current state in Xcode's canonical layout. The design choices that matter:
+
+- **Deterministic identifiers.** New objects get ids derived from what they are (`XX` + 20 digest characters + `XX`, from an embedded hash), so programmatic edits are reproducible run to run and diffs stay minimal. Collisions within a document resolve deterministically.
+- **Soft reads, loud writes.** User-generated projects can be malformed, so lookups return `undefined` where a document could omit something. Operations that cannot proceed without structure (no root project object, an unknown product type, a view whose object was deleted) throw `XcodeModelError`.
+- **Hierarchical build settings.** `getBuildSetting` reads the target's default configuration and inherits from the project-level configuration, the way Xcode resolves settings; `setBuildSetting` writes every configuration so Debug and Release stay consistent.
+- **Idempotent wiring.** Dependencies, embed phases, package products, and build files deduplicate on re-application, so repair flows can run unconditionally.
 
 ## Performance
 
