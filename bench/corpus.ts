@@ -224,13 +224,13 @@ for (const path of paths) {
   counts.set(outcome, (counts.get(outcome) ?? 0) + 1);
 }
 
-// Model exercise. Every parsed project runs through validate(); issue
-// counts are reported as statistics, because real projects are often
-// imperfect and that is not our bug. Projects with an app target also get
-// a probe edit: write a setting, add an extension target, embed it, then
-// remove it all again. The document must stay byte-stable after the edit
-// and after the teardown. Only unexpected errors and instability fail the
-// run.
+// Model exercise, for each parsed project:
+//
+// 1. Run validate(). Issues are statistics, not failures.
+// 2. If an app target exists: add a probe extension, then remove it.
+//    The document must stay byte-stable after each step.
+//
+// Findings are only unexpected errors and instability.
 console.log("exercising the object model on every parsed project...");
 const issueCounts = new Map<string, number>();
 let modelExercised = 0;
