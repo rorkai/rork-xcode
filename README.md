@@ -43,16 +43,15 @@ pnpm add rork-xcode
 
 Parses a `project.pbxproj` document into plain JavaScript values. The leading `// !$*UTF8*$!` marker and all comments are treated as trivia.
 
-| Source shape                                | JavaScript value |
-| ------------------------------------------- | ---------------- |
-| `{ key = value; ... }`                      | plain object     |
-| `( item, item, ... )`                       | array            |
-| unquoted digit run (`46`)                   | `number`         |
-| unquoted decimal not ending in `0` (`3.14`) | `number`         |
-| `<48656c6c6f>`                              | `Uint8Array`     |
-| everything else                             | `string`         |
+| Source shape                                           | JavaScript value |
+| ------------------------------------------------------ | ---------------- |
+| `{ key = value; ... }`                                 | plain object     |
+| `( item, item, ... )`                                  | array            |
+| unquoted number that prints back (`46`, `3.14`, `-12`) | `number`         |
+| `<48656c6c6f>`                                         | `Uint8Array`     |
+| everything else                                        | `string`         |
 
-Dictionary keys keep document order. Quoted values are always strings, so `"46"` and `46` remain distinguishable.
+An unquoted literal becomes a number exactly when the number formats back to the identical text, so serializing can never change a scalar's bytes: leading-zero values (`0755`), trailing-zero versions (`5.0`), bare-dot decimals (`.5`), and digit runs beyond double precision all stay strings. Dictionary keys keep document order. Quoted values are always strings, so `"46"` and `46` remain distinguishable.
 
 ```ts
 import { parsePbxproj, PbxprojParseError } from "rork-xcode";

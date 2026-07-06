@@ -70,12 +70,16 @@ const INDENTS: string[] = [""];
  * Returns the shared indentation string for a nesting depth.
  */
 function indentString(depth: number): string {
-  let known = INDENTS[INDENTS.length - 1]!;
+  const cached = INDENTS[depth];
+  if (cached != null) {
+    return cached;
+  }
+  let known = INDENTS.at(-1)!;
   while (INDENTS.length <= depth) {
     known += "\t";
     INDENTS.push(known);
   }
-  return INDENTS[depth]!;
+  return known;
 }
 
 /**
@@ -151,7 +155,9 @@ class Writer {
 
   /**
    * Renders a string as a uuid reference with its display comment, or as a
-   * plain quoted value when no comment is derived for it.
+   * plain quoted value when no comment is derived for it. Annotated ids are
+   * quoted too when the format requires it — Xcode ids never need quotes,
+   * but object keys in hand-written documents can.
    */
   private renderReference(id: string): string {
     const cached = this.renderedReferences.get(id);
@@ -160,7 +166,9 @@ class Writer {
     }
     const comment = this.comments.get(id);
     const rendered =
-      comment != null && comment.length > 0 ? `${id} /* ${sanitizeComment(comment)} */` : ensureQuotes(id);
+      comment != null && comment.length > 0
+        ? `${ensureQuotes(id)} /* ${sanitizeComment(comment)} */`
+        : ensureQuotes(id);
     this.renderedReferences.set(id, rendered);
     return rendered;
   }

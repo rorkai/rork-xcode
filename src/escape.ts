@@ -58,7 +58,7 @@ const CODE_BACKSLASH = 0x5c;
 /**
  * Whether the code unit is an ASCII hexadecimal digit (`0-9A-Fa-f`).
  */
-function isHexDigit(code: number): boolean {
+export function isHexDigit(code: number): boolean {
   return (
     (code >= 0x30 && code <= 0x39) || // 0-9
     (code >= 0x41 && code <= 0x46) || // A-F
@@ -67,14 +67,91 @@ function isHexDigit(code: number): boolean {
 }
 
 /**
+ * Single-character escapes and their decoded text. An escaped line break
+ * decodes to a newline, like the C escape it mirrors.
+ */
+const SIMPLE_ESCAPES: Readonly<Record<string, string>> = {
+  a: "\u0007",
+  b: "\b",
+  f: "\f",
+  n: "\n",
+  r: "\r",
+  t: "\t",
+  v: "\v",
+  '"': '"',
+  "'": "'",
+  "\\": "\\",
+  "\n": "\n",
+};
+
+/**
+ * Decodes a `\Uxxxx` escape whose backslash sits at `index`. Returns the
+ * decoded text and the index after the escape, or `undefined` when the
+ * sequence is not exactly four hex digits.
+ */
+function readUnicodeEscape(input: string, index: number): [text: string, next: number] | undefined {
+  const hex = input.slice(index + 2, index + 6);
+  if (hex.length !== 4) {
+    return undefined;
+  }
+  for (let i = 0; i < 4; i++) {
+    if (!isHexDigit(hex.charCodeAt(i))) {
+      return undefined;
+    }
+  }
+  const code = Number.parseInt(hex, 16);
+  // A lone surrogate is not a character; drop it rather than emit an
+  // unpaired UTF-16 unit that would poison later encoding.
+  return [code < 0xd800 || code > 0xdfff ? String.fromCharCode(code) : "", index + 6];
+}
+
+/**
+ * Decodes a `\NNN` octal escape (1-3 digits) whose backslash sits at
+ * `index`, mapping values at or above 0x80 through the NeXTSTEP character
+ * set. Returns the decoded text and the index after the escape.
+ */
+function readOctalEscape(input: string, index: number): [text: string, next: number] {
+  let end = index + 1;
+  while (end < input.length && end < index + 4) {
+    const code = input.charCodeAt(end);
+    if (code < CODE_ZERO || code > CODE_SEVEN) {
+      break;
+    }
+    end++;
+  }
+  const octal = Number.parseInt(input.slice(index + 1, end), 8);
+  return [String.fromCharCode(nextStepToUnicode(octal)), end];
+}
+
+/**
+ * Decodes one escape sequence whose backslash sits at `index`. Returns the
+ * decoded text and the index after the sequence. Unknown escapes preserve
+ * both characters — the lenient behavior needed to read files written by
+ * tools with sloppier escaping than Xcode's.
+ */
+function decodeEscape(input: string, index: number): [text: string, next: number] {
+  const next = input[index + 1] as string;
+  const simple = SIMPLE_ESCAPES[next];
+  if (simple != null) {
+    return [simple, index + 2];
+  }
+  if (next === "U") {
+    return readUnicodeEscape(input, index) ?? ["\\", index + 1];
+  }
+  const code = next.charCodeAt(0);
+  if (code >= CODE_ZERO && code <= CODE_SEVEN) {
+    return readOctalEscape(input, index);
+  }
+  return [`\\${next}`, index + 2];
+}
+
+/**
  * Processes escape sequences in a quoted string (quotes already stripped).
  *
  * Handles the standard escapes (`\a \b \f \n \r \t \v \" \' \\` and an
  * escaped line break), `\Uxxxx` Unicode escapes (exactly 4 hex digits), and
  * `\NNN` octal escapes (1-3 digits, values at or above 0x80 mapped through
- * the NeXTSTEP character set). Unknown escapes preserve both characters, the
- * lenient behavior needed to read files written by tools with sloppier
- * escaping than Xcode's.
+ * the NeXTSTEP character set).
  */
 export function unescapeString(input: string): string {
   const length = input.length;
@@ -83,93 +160,13 @@ export function unescapeString(input: string): string {
 
   while (i < length) {
     if (input.charCodeAt(i) === CODE_BACKSLASH && i + 1 < length) {
-      const next = input[i + 1] as string;
-      switch (next) {
-        case "a":
-          result += "\x07";
-          i += 2;
-          continue;
-        case "b":
-          result += "\b";
-          i += 2;
-          continue;
-        case "f":
-          result += "\f";
-          i += 2;
-          continue;
-        case "n":
-          result += "\n";
-          i += 2;
-          continue;
-        case "r":
-          result += "\r";
-          i += 2;
-          continue;
-        case "t":
-          result += "\t";
-          i += 2;
-          continue;
-        case "v":
-          result += "\v";
-          i += 2;
-          continue;
-        case '"':
-          result += '"';
-          i += 2;
-          continue;
-        case "'":
-          result += "'";
-          i += 2;
-          continue;
-        case "\\":
-          result += "\\";
-          i += 2;
-          continue;
-        case "\n":
-          result += "\n";
-          i += 2;
-          continue;
-        case "U": {
-          const hex = input.slice(i + 2, i + 6);
-          if (hex.length === 4 && [...hex].every((ch) => isHexDigit(ch.charCodeAt(0)))) {
-            const code = Number.parseInt(hex, 16);
-            // A lone surrogate is not a character; drop it rather than emit
-            // an unpaired UTF-16 unit that would poison later encoding.
-            if (code < 0xd800 || code > 0xdfff) {
-              result += String.fromCharCode(code);
-            }
-            i += 6;
-          } else {
-            result += "\\";
-            i += 1;
-          }
-          continue;
-        }
-        default: {
-          const nextCode = next.charCodeAt(0);
-          if (nextCode >= CODE_ZERO && nextCode <= CODE_SEVEN) {
-            let end = i + 1;
-            while (end < length && end < i + 4) {
-              const code = input.charCodeAt(end);
-              if (code < CODE_ZERO || code > CODE_SEVEN) break;
-              end++;
-            }
-            const octal = Number.parseInt(input.slice(i + 1, end), 8);
-            result += String.fromCharCode(nextStepToUnicode(octal));
-            i = end;
-            continue;
-          }
-          // Unknown escape — preserve both characters.
-          result += "\\";
-          result += next;
-          i += 2;
-          continue;
-        }
-      }
+      const [text, next] = decodeEscape(input, i);
+      result += text;
+      i = next;
+    } else {
+      result += input[i];
+      i += 1;
     }
-
-    result += input[i];
-    i += 1;
   }
 
   return result;

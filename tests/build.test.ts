@@ -28,6 +28,12 @@ test("quotes values exactly when the unquoted alphabet requires it", () => {
 test("escapes control characters and quotes inside quoted strings", () => {
   const text = buildPbxproj({ script: 'echo "hi"\nexit 0\n' });
   expect(text).toContain(String.raw`script = "echo \"hi\"\nexit 0\n";`);
+
+  // DEL is escapable like the other control characters, and the escape
+  // decodes back to the same value.
+  const del = buildPbxproj({ v: "a\u007Fb" });
+  expect(del).toContain(String.raw`v = "a\U007fb";`);
+  expect(parsePbxproj(del)).toEqual({ v: "a\u007Fb" });
 });
 
 test("numbers render verbatim; version-like settings stay strings end to end", () => {

@@ -45,6 +45,21 @@ interface PhaseInfo {
 }
 
 /**
+ * Records `id → info` for every string in `ids` not yet present, keeping
+ * the first occurrence in document order.
+ */
+function indexFirst<Info>(index: Map<string, Info>, ids: PbxprojValue | undefined, info: Info): void {
+  if (!Array.isArray(ids)) {
+    return;
+  }
+  for (const id of ids) {
+    if (typeof id === "string" && !index.has(id)) {
+      index.set(id, info);
+    }
+  }
+}
+
+/**
  * Derives the display name of a build phase from its isa:
  * `PBXSourcesBuildPhase` becomes `Sources`. Returns `undefined` for isa
  * names outside the `PBX…BuildPhase` pattern.
@@ -112,14 +127,7 @@ export function createReferenceComments(root: PbxprojValue): Map<string, string>
     const isa = asString(owner["isa"]) ?? "";
 
     if (isa.endsWith("BuildPhase")) {
-      const files = owner["files"];
-      if (Array.isArray(files)) {
-        for (const file of files) {
-          if (typeof file === "string" && !fileToPhase.has(file)) {
-            fileToPhase.set(file, { isa, name: asString(owner["name"]) });
-          }
-        }
-      }
+      indexFirst(fileToPhase, owner["files"], { isa, name: asString(owner["name"]) });
     } else if (isa === "PBXContainerItemProxy") {
       const portal = asString(owner["containerPortal"]);
       const remoteInfo = asString(owner["remoteInfo"]);
@@ -130,22 +138,8 @@ export function createReferenceComments(root: PbxprojValue): Map<string, string>
 
     // File-system-synchronized groups list their exception sets, and targets
     // list their build phases; both indexes serve the exception-set comments.
-    const exceptions = owner["exceptions"];
-    if (Array.isArray(exceptions)) {
-      for (const exceptionId of exceptions) {
-        if (typeof exceptionId === "string" && !syncGroupByExceptionSet.has(exceptionId)) {
-          syncGroupByExceptionSet.set(exceptionId, owner);
-        }
-      }
-    }
-    const buildPhases = owner["buildPhases"];
-    if (Array.isArray(buildPhases)) {
-      for (const phaseId of buildPhases) {
-        if (typeof phaseId === "string" && !targetByBuildPhase.has(phaseId)) {
-          targetByBuildPhase.set(phaseId, owner);
-        }
-      }
-    }
+    indexFirst(syncGroupByExceptionSet, owner["exceptions"], owner);
+    indexFirst(targetByBuildPhase, owner["buildPhases"], owner);
 
     const listId = asString(owner["buildConfigurationList"]);
     if (listId != null && !configurationListOwners.has(listId)) {

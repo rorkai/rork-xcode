@@ -10,7 +10,7 @@
  */
 
 import { PbxprojParseError } from "./errors";
-import { unescapeString } from "./escape";
+import { isHexDigit, unescapeString } from "./escape";
 import type { PbxprojObject, PbxprojValue } from "./types";
 
 /**
@@ -77,13 +77,6 @@ function isDigit(code: number): boolean {
 }
 
 /**
- * Whether the code unit is an ASCII hexadecimal digit (`0-9A-Fa-f`).
- */
-function isHexDigit(code: number): boolean {
-  return isDigit(code) || (code >= 0x41 && code <= 0x46) || (code >= 0x61 && code <= 0x66);
-}
-
-/**
  * Scanner state and grammar productions for one parse call.
  *
  * The parser holds a single cursor into the source string and advances it
@@ -143,7 +136,13 @@ class Parser {
         }
         if (next === CODE_ASTERISK) {
           const commentEnd = input.indexOf("*/", pos + 2);
-          pos = commentEnd === -1 ? length : commentEnd + 2;
+          if (commentEnd === -1) {
+            // Only comments before or inside the root value reach this
+            // scanner; content after the root is never read, so a trailing
+            // unterminated comment still parses (as Apple's parser does).
+            this.fail("Unterminated block comment", pos);
+          }
+          pos = commentEnd + 2;
           continue;
         }
       }
@@ -405,63 +404,37 @@ class Parser {
  * 24-character identifiers that dominate project documents are classified
  * within their first few characters.
  *
- * See the module documentation of `types.ts` for the exact policy and the
- * reasoning behind the string preservations (leading zeros, trailing-zero
- * decimals, unsafe integers).
+ * Numeric-looking candidates convert under a single print-back rule: the
+ * literal becomes a number exactly when the number formats back to the
+ * identical text. Everything the conversion would reshape — leading zeros
+ * (`0755`), trailing-zero decimals (`5.0`), bare-dot decimals (`.5`),
+ * negative zero, digit runs beyond double precision — therefore stays a
+ * string, so a parse → build cycle cannot change a single byte of any
+ * scalar. See the module documentation of `types.ts` for the value model.
  */
 function interpretLiteral(literal: string): PbxprojValue {
-  const length = literal.length;
   const first = literal.charCodeAt(0);
-
-  // A leading '-' is the only position where a sign reads as numeric.
-  let start = 0;
-  let negative = false;
-  if (first === CODE_MINUS && length > 1) {
-    negative = true;
-    start = 1;
-  } else if (!isDigit(first) && first !== CODE_DOT) {
+  if (!isDigit(first) && first !== CODE_DOT && first !== CODE_MINUS) {
     return literal;
   }
 
-  let digits = 0;
+  // A numeric candidate is digits with at most one dot, plus an optional
+  // leading '-'; anything else is a plain string.
   let dots = 0;
-  for (let i = start; i < length; i++) {
+  for (let i = first === CODE_MINUS ? 1 : 0; i < literal.length; i++) {
     const code = literal.charCodeAt(i);
-    if (code >= CODE_ZERO && code <= CODE_NINE) {
-      digits++;
-    } else if (code === CODE_DOT && dots === 0) {
+    if (code === CODE_DOT) {
+      if (dots === 1) {
+        return literal;
+      }
       dots = 1;
-    } else {
+    } else if (!isDigit(code)) {
       return literal;
     }
-  }
-  if (digits === 0) {
-    return literal; // "-", ".", "-."
   }
 
-  if (dots === 0) {
-    // Pure digit runs: negative integers stay strings (Xcode never writes
-    // them unquoted), leading zeros carry meaning (file modes, padded ids),
-    // and a too-large run cannot survive the trip through a double.
-    if (negative) {
-      return literal;
-    }
-    if (length === 1) {
-      return first - CODE_ZERO;
-    }
-    if (first === CODE_ZERO) {
-      return literal;
-    }
-    const value = Number(literal);
-    return value <= Number.MAX_SAFE_INTEGER ? value : literal;
-  }
-
-  // Exactly one dot. Trailing-zero decimals stay strings to survive
-  // round-trips.
-  if (literal.charCodeAt(length - 1) === CODE_ZERO) {
-    return literal;
-  }
-  return Number(literal);
+  const value = Number(literal);
+  return String(value) === literal ? value : literal;
 }
 
 /**

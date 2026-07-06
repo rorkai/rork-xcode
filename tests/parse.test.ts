@@ -72,15 +72,23 @@ describe("unquoted literal interpretation", () => {
 
   it("parses decimals but keeps trailing-zero decimals as strings", () => {
     expect(parsePbxproj("{ v = 3.14; }")).toEqual({ v: 3.14 });
-    expect(parsePbxproj("{ v = .5; }")).toEqual({ v: 0.5 });
     expect(parsePbxproj("{ v = 5.0; }")).toEqual({ v: "5.0" });
     expect(parsePbxproj("{ v = 18.0; }")).toEqual({ v: "18.0" });
   });
 
-  it("keeps versions and signed values as strings", () => {
-    expect(parsePbxproj("{ v = 1.0.0; }")).toEqual({ v: "1.0.0" });
+  it("converts signed values exactly when the number prints back identically", () => {
+    expect(parsePbxproj("{ v = -12; }")).toEqual({ v: -12 });
+    expect(parsePbxproj("{ v = -3.14; }")).toEqual({ v: -3.14 });
+    expect(parsePbxproj("{ v = -0; }")).toEqual({ v: "-0" });
     expect(parsePbxproj("{ v = -ObjC; }")).toEqual({ v: "-ObjC" });
-    expect(parsePbxproj("{ v = -12; }")).toEqual({ v: "-12" });
+  });
+
+  it("keeps every lexical form a number cannot reproduce as a string", () => {
+    expect(parsePbxproj("{ v = 1.0.0; }")).toEqual({ v: "1.0.0" });
+    // A bare-dot decimal converts to 0.5, which prints back as "0.5" — a
+    // different byte sequence, so the literal stays a string.
+    expect(parsePbxproj("{ v = .5; }")).toEqual({ v: ".5" });
+    expect(parsePbxproj("{ v = 5.; }")).toEqual({ v: "5." });
   });
 });
 
@@ -117,6 +125,14 @@ describe("malformed input", () => {
 
   it("rejects data runs with an odd number of hex digits", () => {
     expect(() => parsePbxproj("{ data = <ABC>; }")).toThrow(PbxprojParseError);
+  });
+
+  it("rejects unterminated block comments before or inside the root value", () => {
+    expect(() => parsePbxproj("{ a = /* never closed")).toThrow("Unterminated block comment");
+    expect(() => parsePbxproj("/* header { }")).toThrow("Unterminated block comment");
+    // Content after the root value is never read, so a trailing unterminated
+    // comment does not fail (Apple's parser accepts it too).
+    expect(parsePbxproj("{ a = 1; } /* trailing")).toEqual({ a: 1 });
   });
 });
 

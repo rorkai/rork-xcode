@@ -7,21 +7,20 @@
  *
  * - `{ key = value; ... }` parses to a {@link PbxprojObject}.
  * - `( item, item, ... )` parses to a {@link PbxprojArray}.
- * - Unquoted digit runs (`46`) and decimals not ending in `0` (`3.14`)
- *   parse to `number`.
  * - `<48656c6c6f>` data runs parse to `Uint8Array`.
+ * - Unquoted integers and decimals (`46`, `3.14`, `-12`) parse to `number`
+ *   under one print-back rule: the literal converts exactly when the number
+ *   formats back to the identical text.
  * - Everything else — quoted text, identifiers, uuids, paths — parses to
  *   `string`.
  *
- * Three deliberate string preservations keep round-trips faithful:
- *
- * - Digit runs with a leading zero (`0755`) stay strings — collapsing them
- *   to numbers would corrupt file modes and zero-padded identifiers.
- * - Decimals ending in `0` (`5.0`, `18.0`) stay strings — number conversion
- *   would drop the trailing zero that build settings like deployment targets
- *   are written with.
- * - Integers beyond `Number.MAX_SAFE_INTEGER` stay strings so 24-character
- *   hex identifiers that happen to be all digits never lose precision.
+ * The print-back rule is what keeps round-trips faithful: any literal the
+ * conversion would reshape stays a string, so serializing never changes a
+ * scalar's bytes. Leading-zero runs (`0755`) would corrupt file modes,
+ * trailing-zero decimals (`5.0`) would drop the zero build settings are
+ * written with, bare-dot decimals (`.5`) would grow a leading zero, and
+ * digit runs beyond `Number.MAX_SAFE_INTEGER` — 24-character identifiers
+ * can be all digits — would lose precision; all therefore parse as strings.
  *
  * @module
  */

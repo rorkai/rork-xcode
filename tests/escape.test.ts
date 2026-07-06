@@ -11,7 +11,7 @@ test("decodes standard escapes", () => {
   expect(parseValue(String.raw`"a\\b"`)).toBe("a\\b");
   expect(parseValue(String.raw`"say \"hi\""`)).toBe('say "hi"');
   expect(parseValue(String.raw`"it\'s"`)).toBe("it's");
-  expect(parseValue(String.raw`"\a\b\f\v"`)).toBe("\x07\b\f\v");
+  expect(parseValue(String.raw`"\a\b\f\v"`)).toBe("\u0007\b\f\v");
 });
 
 test("decodes \\Uxxxx unicode escapes", () => {
@@ -33,8 +33,8 @@ test("decodes octal escapes, ASCII range directly", () => {
 test("maps octal escapes at or above 0x80 through the NeXTSTEP character set", () => {
   // 0o200 = 0x80 → no-break space; 0o341 = 0xE1 → Æ. Latin-1 would give a
   // control character and á respectively — the mapping is the difference.
-  expect(parseValue(String.raw`"\200"`)).toBe("\u00a0");
-  expect(parseValue(String.raw`"\341"`)).toBe("\u00c6");
+  expect(parseValue(String.raw`"\200"`)).toBe("\u00A0");
+  expect(parseValue(String.raw`"\341"`)).toBe("\u00C6");
 });
 
 test("preserves unknown escapes as both characters", () => {

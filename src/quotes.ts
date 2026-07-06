@@ -86,8 +86,10 @@ export function escapeString(value: string): string {
         result += "\\\\";
         break;
       default: {
+        // DEL joins the control characters here so every character
+        // needsEscaping reports actually receives an escape sequence.
         const code = ch.charCodeAt(0);
-        if (code < 0x20) {
+        if (code < 0x20 || code === 0x7f) {
           result += `\\U${code.toString(16).padStart(4, "0")}`;
         } else {
           result += ch;

@@ -224,12 +224,19 @@ const fixtures: Record<string, string> = {
 };
 
 /**
+ * Accumulates a byte of every measured result so the JIT cannot prove the
+ * calls dead and elide the very work being measured. Printed at the end.
+ */
+let sink = 0;
+
+/**
  * Runs one timing batch and returns the mean nanoseconds per operation.
  */
 function batchNsPerOp(fn: () => unknown, iterations: number): number {
   const start = process.hrtime.bigint();
   for (let i = 0; i < iterations; i++) {
-    fn();
+    const result = fn();
+    sink += typeof result === "string" ? result.length & 0xff : 1;
   }
   return Number(process.hrtime.bigint() - start) / iterations;
 }
@@ -347,3 +354,4 @@ for (const [key, multipliers] of summary) {
   const geometricMean = Math.exp(multipliers.reduce((total, m) => total + Math.log(m), 0) / multipliers.length);
   console.log(`  ${key.padEnd(24)} ${geometricMean.toFixed(2)}x`);
 }
+console.log(`\nchecksum ${sink % 997}`);
