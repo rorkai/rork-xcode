@@ -55,6 +55,14 @@ export class RootProject extends XcodeObject {
   }
 
   /**
+   * The views of the project's Swift package references, remote and local,
+   * in declaration order.
+   */
+  packageReferences(): XcodeObject[] {
+    return this.referencedViews("packageReferences");
+  }
+
+  /**
    * The group product references live in, creating it (and registering it
    * as the project's `productRefGroup`) when missing.
    */
@@ -417,6 +425,36 @@ export class XcodeProject {
   }
 
   /**
+   * Finds the local Swift package reference for a directory path.
+   */
+  findLocalSwiftPackage(relativePath: string): XcodeObject | undefined {
+    return this.rootProject
+      .packageReferences()
+      .find(
+        (reference) =>
+          reference.isa === Isa.localSwiftPackageReference && reference.getString("relativePath") === relativePath,
+      );
+  }
+
+  /**
+   * Adds a local (path-based) Swift package reference and registers it on
+   * the project. Products link to targets the same way as remote packages,
+   * through {@link NativeTarget.addSwiftPackageProduct}.
+   *
+   * @param relativePath The package directory, relative to the project.
+   * @returns The view of the created package reference.
+   */
+  addLocalSwiftPackage(relativePath: string): XcodeObject {
+    const reference = this.add(
+      Isa.localSwiftPackageReference,
+      { relativePath },
+      `${Isa.localSwiftPackageReference} ${relativePath}`,
+    );
+    ensureArray(this.rootProject.properties, "packageReferences").push(reference.id);
+    return reference;
+  }
+
+  /**
    * The views of every `PBXBuildFile` that points at the referenced object
    * through `fileRef` or `productRef`. Useful for relocating a product
    * between copy phases.
@@ -432,6 +470,115 @@ export class XcodeProject {
       }
     }
     return buildFiles;
+  }
+
+  /**
+   * The views of every object that references the id anywhere in its
+   * properties: a string property naming it, an id list containing it, or
+   * a nested dictionary carrying it as a key or string value.
+   *
+   * The scan is linear over the document; removal flows call it once per
+   * removed object, which keeps teardown proportional to what is actually
+   * removed.
+   */
+  referrersOf(id: string): XcodeObject[] {
+    const referrers: XcodeObject[] = [];
+    for (const [referrerId, view] of this.objects()) {
+      if (referrerId !== id && objectReferences(view.properties, id)) {
+        referrers.push(view);
+      }
+    }
+    return referrers;
+  }
+
+  /**
+   * Removes an object from the document and strips every reference to it
+   * from the remaining objects: string properties naming the id are
+   * deleted, id lists drop it, and nested dictionaries keyed by object id
+   * (such as `TargetAttributes`) drop its entry.
+   *
+   * Removing an id the document does not contain is a no-op. This is the
+   * low-level removal; {@link removeTarget} composes it into a full
+   * teardown.
+   */
+  removeObject(id: string): void {
+    if (!(id in this.objectsDictionary)) {
+      return;
+    }
+    delete this.objectsDictionary[id];
+    this.views.delete(id);
+    for (const [, view] of this.objects()) {
+      stripReferences(view.properties, id);
+    }
+  }
+
+  /**
+   * Removes a target and everything that exists only for its sake: its
+   * build phases and their build files, its configuration list and
+   * configurations, its product reference and the build files embedding
+   * it, dependency objects (and their container proxies) other targets
+   * hold on it, its membership exception sets, and synchronized folders no
+   * remaining target links.
+   *
+   * On-disk sources are untouched; the removal is document-only, like
+   * deleting a target in Xcode and keeping its folder.
+   */
+  removeTarget(target: NativeTarget): void {
+    const ownedIds = new Set<string>();
+
+    for (const phase of target.buildPhases()) {
+      for (const buildFileId of phase.buildFileIds) {
+        ownedIds.add(buildFileId);
+      }
+      ownedIds.add(phase.id);
+    }
+
+    const configurationListId = target.getString("buildConfigurationList");
+    if (configurationListId != null) {
+      for (const configuration of target.buildConfigurations()) {
+        ownedIds.add(configuration.id);
+      }
+      ownedIds.add(configurationListId);
+    }
+
+    const product = target.productReference;
+    if (product != null) {
+      for (const buildFile of this.buildFilesReferencing(product)) {
+        ownedIds.add(buildFile.id);
+      }
+      ownedIds.add(product.id);
+    }
+
+    // Dependencies other targets hold on this one, with their proxies.
+    for (const [, view] of this.objects()) {
+      if (view.isa === Isa.targetDependency && view.getString("target") === target.id) {
+        const proxyId = view.getString("targetProxy");
+        if (proxyId != null) {
+          ownedIds.add(proxyId);
+        }
+        ownedIds.add(view.id);
+      }
+      if (view.isa === Isa.fileSystemSynchronizedBuildFileExceptionSet && view.getString("target") === target.id) {
+        ownedIds.add(view.id);
+      }
+    }
+
+    const syncGroupIds = stringItems(target.properties["fileSystemSynchronizedGroups"]);
+
+    this.removeObject(target.id);
+    for (const id of ownedIds) {
+      this.removeObject(id);
+    }
+
+    // Synchronized folders survive when another target still links them.
+    for (const groupId of syncGroupIds) {
+      const stillLinked = this.nativeTargets().some((remaining) =>
+        stringItems(remaining.properties["fileSystemSynchronizedGroups"]).includes(groupId),
+      );
+      if (!stillLinked) {
+        this.removeObject(groupId);
+      }
+    }
   }
 
   /**
@@ -513,4 +660,57 @@ export class XcodeProject {
  */
 function joinPath(prefix: string, segment: string): string {
   return prefix === "" ? segment : `${prefix}/${segment}`;
+}
+
+/**
+ * Whether an object's properties reference the id anywhere: as a string
+ * value, inside an array, or inside a nested dictionary (as key or value).
+ */
+function objectReferences(properties: PbxprojObject, id: string): boolean {
+  for (const key of Object.keys(properties)) {
+    const value = properties[key];
+    if (typeof value === "string") {
+      if (value === id) {
+        return true;
+      }
+    } else if (Array.isArray(value)) {
+      if (value.includes(id)) {
+        return true;
+      }
+    } else if (asDictionary(value) != null) {
+      const nested = value as PbxprojObject;
+      if (id in nested || objectReferences(nested, id)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Strips every reference to the id from an object's properties: string
+ * properties naming it are deleted, arrays drop it, and nested
+ * dictionaries drop entries keyed by it and recurse into their values.
+ */
+function stripReferences(properties: PbxprojObject, id: string): void {
+  for (const key of Object.keys(properties)) {
+    const value = properties[key];
+    if (typeof value === "string") {
+      if (value === id) {
+        delete properties[key];
+      }
+    } else if (Array.isArray(value)) {
+      if (value.includes(id)) {
+        properties[key] = value.filter((item) => item !== id);
+      }
+    } else {
+      const nested = asDictionary(value);
+      if (nested != null) {
+        if (id in nested) {
+          delete nested[id];
+        }
+        stripReferences(nested, id);
+      }
+    }
+  }
 }

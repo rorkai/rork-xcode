@@ -28,11 +28,52 @@ export class Group extends XcodeObject {
   }
 
   /**
+   * The views of the group's children, in navigator order.
+   */
+  children(): XcodeObject[] {
+    return this.referencedViews("children");
+  }
+
+  /**
    * Adds an existing object (a file reference or another group) to the end
    * of the group's children.
    */
   addChild(child: XcodeObject): void {
     ensureArray(this.properties, "children").push(child.id);
+  }
+
+  /**
+   * Returns the descendant group for a `/`-separated path, creating any
+   * missing groups along the way. Each component matches a child group by
+   * its `path`, falling back to its `name`; created groups carry the
+   * component as their `path` so they mirror folders on disk.
+   *
+   * ```ts
+   * const generated = mainGroup.ensureGroup("Sources/Generated");
+   * generated.createFile("Config.swift");
+   * ```
+   */
+  ensureGroup(path: string): Group {
+    const components = path.split("/").filter((component) => component !== "");
+    return components.reduce<Group>((parent, component) => {
+      const existing = parent
+        .children()
+        .find(
+          (child): child is Group =>
+            child instanceof Group && (child.getString("path") ?? child.getString("name")) === component,
+        );
+      if (existing != null) {
+        return existing;
+      }
+      const created = this.project.add(
+        Isa.group,
+        { children: [], path: component, sourceTree: "<group>" },
+        `${Isa.group} ${parent.id} ${component}`,
+      );
+      parent.addChild(created);
+      // The factory maps the group isa to Group.
+      return created as Group;
+    }, this);
   }
 
   /**

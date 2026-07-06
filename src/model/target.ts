@@ -129,6 +129,33 @@ export class NativeTarget extends XcodeObject {
   }
 
   /**
+   * The views of the target's dependency objects
+   * (`PBXTargetDependency`), in declaration order. Resolve a dependency's
+   * target through its `target` property.
+   */
+  dependencies(): XcodeObject[] {
+    return this.referencedViews("dependencies");
+  }
+
+  /**
+   * The views of the target's Swift package product dependencies, in
+   * declaration order.
+   */
+  packageProductDependencies(): XcodeObject[] {
+    return this.referencedViews("packageProductDependencies");
+  }
+
+  /**
+   * The views of the target's file-system-synchronized folders, in
+   * declaration order.
+   */
+  syncGroups(): SyncRootGroup[] {
+    return this.referencedViews("fileSystemSynchronizedGroups").filter(
+      (view): view is SyncRootGroup => view instanceof SyncRootGroup,
+    );
+  }
+
+  /**
    * The views of the target's build phases, in build order.
    */
   buildPhases(): BuildPhase[] {
@@ -201,6 +228,27 @@ export class NativeTarget extends XcodeObject {
    */
   ensureResourcesPhase(): BuildPhase {
     return this.ensureBuildPhase(Isa.resourcesBuildPhase);
+  }
+
+  /**
+   * The target's shell-script phase with the given name, created with the
+   * usual defaults (`/bin/sh`, empty input and output lists) when missing.
+   * The script and other properties apply only on creation.
+   *
+   * @param name Display name of the phase, which is also its match key.
+   * @param properties Phase properties, most usefully `shellScript`.
+   */
+  ensureShellScriptPhase(name: string, properties: PbxprojObject = {}): BuildPhase {
+    return this.ensureBuildPhase("PBXShellScriptBuildPhase", {
+      inputFileListPaths: [],
+      inputPaths: [],
+      name,
+      outputFileListPaths: [],
+      outputPaths: [],
+      shellPath: "/bin/sh",
+      shellScript: "",
+      ...properties,
+    });
   }
 
   /**

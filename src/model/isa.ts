@@ -29,6 +29,7 @@ export const Isa = {
   targetDependency: "PBXTargetDependency",
   buildConfiguration: "XCBuildConfiguration",
   configurationList: "XCConfigurationList",
+  localSwiftPackageReference: "XCLocalSwiftPackageReference",
   remoteSwiftPackageReference: "XCRemoteSwiftPackageReference",
   swiftPackageProductDependency: "XCSwiftPackageProductDependency",
 } as const;

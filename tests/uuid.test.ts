@@ -5,7 +5,7 @@ import { generateObjectId } from "../src/uuid";
 test("formats ids as XX plus twenty digest characters plus XX", () => {
   const id = generateObjectId("test-seed", new Set());
   expect(id).toHaveLength(24);
-  expect(id).toMatch(/^XX[0-9A-F]{20}XX$/);
+  expect(id).toMatch(/^XX[0-9A-F]{20}XX$/u);
 
   // The digest characters are the first twenty of md5(seed). Pinning the
   // exact mapping keeps generated ids stable across releases, so documents

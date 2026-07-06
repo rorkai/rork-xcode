@@ -370,6 +370,149 @@ describe("build files and phases", () => {
   });
 });
 
+describe("typed reference accessors", () => {
+  it("exposes dependencies, package products, sync groups, and children as views", () => {
+    const project = openApp();
+    const { host, widget, syncGroup } = scaffoldWidget(project);
+
+    const [dependency] = host.dependencies().slice(-1);
+    assert(dependency);
+    expect(dependency.getString("target")).toBe(widget.id);
+
+    expect(widget.syncGroups()).toEqual([syncGroup]);
+
+    const pkg = project.addSwiftPackage({
+      repositoryURL: "https://github.com/example/example-kit",
+      requirement: { kind: "upToNextMajorVersion", minimumVersion: "1.0.0" },
+    });
+    const product = widget.addSwiftPackageProduct({ productName: "ExampleKit", packageReference: pkg });
+    expect(widget.packageProductDependencies()).toEqual([product]);
+    expect(project.rootProject.packageReferences()).toEqual([pkg]);
+
+    const mainGroup = project.rootProject.mainGroup();
+    assert(mainGroup);
+    expect(mainGroup.children().map((child) => child.id)).toEqual(mainGroup.childIds);
+  });
+});
+
+describe("nested groups", () => {
+  it("creates intermediate groups once and reuses them", () => {
+    const project = openApp();
+    const mainGroup = project.rootProject.mainGroup();
+    assert(mainGroup);
+
+    const generated = mainGroup.ensureGroup("Sources/Generated");
+    expect(generated.getString("path")).toBe("Generated");
+    expect(mainGroup.ensureGroup("Sources/Generated")).toBe(generated);
+    expect(mainGroup.ensureGroup("")).toBe(mainGroup);
+
+    const file = generated.createFile("Config.swift");
+    expect(project.findFileReference("Sources/Generated/Config.swift")).toBe(file);
+  });
+});
+
+describe("local Swift packages", () => {
+  it("adds a path-based package and links its products", () => {
+    const project = openApp();
+    const app = project.findMainAppTarget("ios");
+    assert(app);
+
+    expect(project.findLocalSwiftPackage("Packages/DesignSystem")).toBeUndefined();
+    const reference = project.addLocalSwiftPackage("Packages/DesignSystem");
+    expect(project.findLocalSwiftPackage("Packages/DesignSystem")).toBe(reference);
+
+    app.addSwiftPackageProduct({ productName: "DesignSystem", packageReference: reference });
+    const text = project.build();
+    expect(text).toContain('XCLocalSwiftPackageReference "Packages/DesignSystem"');
+    expect(XcodeProject.parse(text).build()).toBe(text);
+  });
+});
+
+describe("shell-script phases", () => {
+  it("creates a named script phase with defaults and matches it on re-ensure", () => {
+    const project = openApp();
+    const app = project.findMainAppTarget("ios");
+    assert(app);
+
+    const phase = app.ensureShellScriptPhase("Lint", { shellScript: "lint\n" });
+    expect(phase.getString("shellPath")).toBe("/bin/sh");
+    expect(phase.getString("shellScript")).toBe("lint\n");
+    expect(app.ensureShellScriptPhase("Lint")).toBe(phase);
+
+    const text = project.build();
+    expect(text).toContain("/* Lint */");
+    expect(XcodeProject.parse(text).build()).toBe(text);
+  });
+});
+
+describe("removal", () => {
+  it("finds referrers across property shapes", () => {
+    const project = openApp();
+    const app = project.findMainAppTarget("ios");
+    assert(app);
+
+    const referrerIsas = project.referrersOf(app.id).map((referrer) => referrer.isa);
+    // The root project references the target twice: the targets list and
+    // the TargetAttributes dictionary keyed by target id.
+    expect(referrerIsas).toContain(Isa.project);
+  });
+
+  it("removeObject strips references everywhere", () => {
+    const project = openApp();
+    const app = project.findMainAppTarget("ios");
+    assert(app);
+    const id = app.id;
+
+    project.removeObject(id);
+    expect(project.get(id)).toBeUndefined();
+    expect(project.rootProject.targetIds()).not.toContain(id);
+    for (const [, view] of project.objects()) {
+      expect(JSON.stringify(view.properties)).not.toContain(id);
+    }
+    // Removing again is a no-op.
+    project.removeObject(id);
+  });
+
+  it("removeTarget tears down everything the target owns", () => {
+    const project = openApp();
+    const { host, widget } = scaffoldWidget(project);
+    const before = XcodeProject.parse(fixture("app-xcode16.pbxproj"));
+
+    project.removeTarget(widget);
+
+    // No dangling widget artifacts: no build phases, configurations,
+    // product references, dependencies, proxies, exception sets, or sync
+    // groups mentioning the removed target survive.
+    const dump = project.build();
+    expect(dump).not.toContain("DemoWidget");
+    expect(host.dependencies()).toHaveLength(before.findMainAppTarget("ios")?.dependencies().length ?? 0);
+
+    // The document still parses, reserializes stably, and keeps the
+    // original targets.
+    expect(
+      XcodeProject.parse(dump)
+        .nativeTargets()
+        .map((target) => target.name),
+    ).toEqual(["SampleApp", "SampleAppTests", "SampleAppUITests"]);
+    expect(XcodeProject.parse(dump).build()).toBe(dump);
+  });
+
+  it("keeps synchronized folders another target still links", () => {
+    const project = openApp();
+    const { widget } = scaffoldWidget(project);
+    const second = project.addNativeTarget({ name: "SecondWidget", productType: ProductType.appExtension });
+
+    // Link the same folder to a second target, then remove the first.
+    const [group] = widget.syncGroups();
+    assert(group);
+    second.properties["fileSystemSynchronizedGroups"] = [group.id];
+
+    project.removeTarget(widget);
+    expect(project.get(group.id)).toBeDefined();
+    expect(second.syncGroupPaths()).toEqual(["DemoWidget"]);
+  });
+});
+
 describe("failure modes", () => {
   it("rejects documents without model structure", () => {
     expect(() => XcodeProject.parse("( a, b )")).toThrow(XcodeModelError);

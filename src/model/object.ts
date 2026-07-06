@@ -68,4 +68,38 @@ export class XcodeObject {
   set(key: string, value: PbxprojValue): void {
     this.properties[key] = value;
   }
+
+  /**
+   * The views of the objects referenced by an id-list property, resolved in
+   * list order. Dangling ids and non-string entries of malformed documents
+   * are skipped.
+   */
+  protected referencedViews(key: string): XcodeObject[] {
+    const items = this.properties[key];
+    if (!Array.isArray(items)) {
+      return [];
+    }
+    const views: XcodeObject[] = [];
+    for (const item of items) {
+      const view = typeof item === "string" ? this.project.get(item) : undefined;
+      if (view != null) {
+        views.push(view);
+      }
+    }
+    return views;
+  }
+
+  /**
+   * Removes the object from the document and strips every reference to it:
+   * string properties naming the id are deleted, id lists drop it, and
+   * nested dictionaries keyed by object id (such as the root project's
+   * `TargetAttributes`) drop its entry.
+   *
+   * This is the low-level removal; it does not cascade to objects that only
+   * made sense alongside this one. Higher-level operations like
+   * {@link XcodeProject.removeTarget} compose it into full teardowns.
+   */
+  removeFromProject(): void {
+    this.project.removeObject(this.id);
+  }
 }

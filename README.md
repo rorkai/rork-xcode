@@ -147,7 +147,11 @@ const pkg =
 
 // Wires the product dependency and its Frameworks-phase build file.
 app.addSwiftPackageProduct({ productName: "ExampleKit", packageReference: pkg });
-app.ensureSystemFramework("Messages"); // System/Library/Frameworks/Messages.framework
+
+// Local (path-based) packages and system frameworks work the same way.
+const local = project.addLocalSwiftPackage("Packages/DesignSystem");
+app.addSwiftPackageProduct({ productName: "DesignSystem", packageReference: local });
+app.ensureSystemFramework("Messages");
 ```
 
 ### Files, groups, and phases
@@ -155,16 +159,30 @@ app.ensureSystemFramework("Messages"); // System/Library/Frameworks/Messages.fra
 ```ts
 import { Isa } from "rork-xcode";
 
-// Classic (non-synchronized) file management.
+// Classic (non-synchronized) file management, with nested group creation.
 const mainGroup = project.rootProject.mainGroup();
-const file = mainGroup?.createFile("Sources/Config.swift");
+const generated = mainGroup?.ensureGroup("Sources/Generated");
+const file = generated?.createFile("Config.swift");
 if (file) app.ensureSourcesPhase().ensureBuildFile(file);
 
-project.findFileReference("Sources/Config.swift"); // resolves through the group tree
+project.findFileReference("Sources/Generated/Config.swift"); // resolves through the group tree
 
-// Phases expose their build files for reorganization.
+// Phases expose their build files for reorganization, and script phases
+// create with the usual defaults.
 const embedPhase = app.findBuildPhase(Isa.copyFilesBuildPhase, "Embed Foundation Extensions");
 embedPhase?.buildFileIds;
+app.ensureShellScriptPhase("Lint", { shellScript: "lint\n" });
+```
+
+### Removal
+
+`removeObject` deletes one object and strips every reference to it from the rest of the document. `removeTarget` composes it into a full teardown: the target's phases and build files, configurations, product reference and its embeddings, dependency objects other targets hold on it, membership exceptions, and synchronized folders no remaining target links. On-disk sources are untouched.
+
+```ts
+const widget = project.findTarget("DemoWidget");
+if (widget) project.removeTarget(widget);
+
+project.referrersOf(app.id); // every object referencing an id, for custom teardowns
 ```
 
 ### Escape hatch
