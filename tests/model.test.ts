@@ -382,6 +382,30 @@ describe("build files and phases", () => {
   });
 });
 
+describe("typed properties", () => {
+  it("autocompletes known keys while keeping the shape open", () => {
+    const project = openApp();
+    const app = project.findMainAppTarget("ios");
+    assert(app);
+
+    // Known keys read with their declared types; the annotations are
+    // compile-time assertions as much as runtime ones.
+    const name: string | undefined = app.properties.name;
+    expect(name).toBe("SampleApp");
+    const phases: string[] | undefined = app.properties.buildPhases;
+    expect(Array.isArray(phases)).toBe(true);
+
+    // Unknown keys stay first-class through the index signature.
+    app.properties["INFOPLIST_KEY_CustomProbe"] = "YES";
+    expect(app.getString("INFOPLIST_KEY_CustomProbe")).toBe("YES");
+
+    const mainGroup = project.rootProject.mainGroup();
+    assert(mainGroup);
+    const children: string[] | undefined = mainGroup.properties.children;
+    expect(children).toEqual(mainGroup.childIds);
+  });
+});
+
 describe("typed reference accessors", () => {
   it("exposes dependencies, package products, sync groups, and children as views", () => {
     const project = openApp();

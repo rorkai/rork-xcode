@@ -19,8 +19,14 @@ import { asString } from "./values";
  *
  * Two lookups of the same id return the same view instance (the project
  * keeps an identity map), so views compare with `===`.
+ *
+ * The type parameter describes the property shape of a well-formed object
+ * of this kind; subclasses fix it to their kind's interface so
+ * `properties` autocompletes. The shape is a description, not a runtime
+ * guarantee: malformed documents can hold anything, which is why the
+ * model's own logic reads through narrowing accessors instead.
  */
-export class XcodeObject {
+export class XcodeObject<Properties extends PbxprojObject = PbxprojObject> {
   /** The project this object belongs to. */
   readonly project: XcodeProject;
 
@@ -41,9 +47,12 @@ export class XcodeObject {
    * The object's raw dictionary inside the document. Mutations through the
    * model write here, and direct writes are equally valid; the model adds
    * no caching over these properties.
+   *
+   * The typed shape is asserted, not checked: it describes what a
+   * well-formed object of this kind carries (see `properties.ts`).
    */
-  get properties(): PbxprojObject {
-    return this.project.propertiesOf(this.id);
+  get properties(): Properties {
+    return this.project.propertiesOf(this.id) as Properties;
   }
 
   /**
@@ -64,9 +73,13 @@ export class XcodeObject {
 
   /**
    * Writes one property of the object.
+   *
+   * The write goes through the untyped document dictionary: generic types
+   * cannot be indexed for writing, and the typed shape on `properties` is
+   * descriptive rather than enforced.
    */
   set(key: string, value: PbxprojValue): void {
-    this.properties[key] = value;
+    this.project.propertiesOf(this.id)[key] = value;
   }
 
   /**

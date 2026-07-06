@@ -17,9 +17,11 @@ import { XcodeModelError } from "../errors";
 import { parsePbxproj } from "../parse";
 import type { PbxprojObject, PbxprojValue } from "../types";
 import { generateObjectId } from "../uuid";
+import { pruneOrphanObjects, validateProject, type ProjectIssue } from "./doctor";
 import { DEPLOYMENT_TARGET_KEY, Isa, PRODUCT_FILE_INFO, ProductType, type ApplePlatform } from "./isa";
 import { XcodeObject } from "./object";
 import { BuildPhase, Group, SyncRootGroup } from "./objects";
+import type { RootProjectProperties } from "./properties";
 import { defaultConfigurationSettingsOf } from "./settings";
 import { NativeTarget } from "./target";
 import { asDictionary, asString, ensureArray, stringItems } from "./values";
@@ -28,7 +30,7 @@ import { asDictionary, asString, ensureArray, stringItems } from "./values";
  * The `PBXProject` object at the document root: the container that owns
  * the target list, the main group, and project-level configurations.
  */
-export class RootProject extends XcodeObject {
+export class RootProject extends XcodeObject<RootProjectProperties> {
   /**
    * Ids of the project's targets, in project order.
    */
@@ -481,6 +483,24 @@ export class XcodeProject {
       }
     }
     return buildFiles;
+  }
+
+  /**
+   * Validates the document's object graph: the root object, object kinds,
+   * the known reference schema, and reachability. Returns every problem
+   * found; an empty array means the graph is structurally sound.
+   */
+  validate(): ProjectIssue[] {
+    return validateProject(this);
+  }
+
+  /**
+   * Removes every object unreachable from the root object and returns the
+   * removed ids. Reachability is conservative: any real reference keeps an
+   * object alive, even through properties outside the known schema.
+   */
+  pruneOrphans(): string[] {
+    return pruneOrphanObjects(this);
   }
 
   /**

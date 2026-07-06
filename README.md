@@ -172,6 +172,17 @@ embedPhase?.buildFileIds;
 app.ensureShellScriptPhase("Lint", { shellScript: "lint\n" });
 ```
 
+### Validation
+
+`validate()` reports structural problems: a missing or dangling root object, objects without a kind, references to ids the document does not contain, and objects unreachable from the root. `pruneOrphans()` removes the unreachable ones. Reachability is conservative — any real reference keeps an object alive, even through properties outside the known schema — so pruning is safe on documents that use vendor-specific extensions.
+
+```ts
+for (const issue of project.validate()) {
+  console.warn(issue.kind, issue.message);
+}
+project.pruneOrphans(); // returns the removed ids
+```
+
 ### Removal
 
 `removeObject` deletes one object and strips every reference to it from the rest of the document. `removeTarget` composes it into a full teardown: the target's phases and build files, configurations, product reference and its embeddings, dependency objects other targets hold on it, membership exceptions, and synchronized folders no remaining target links. On-disk sources are untouched.
@@ -199,6 +210,7 @@ for (const [id, object] of project.objects()) {
 
 ### Semantics
 
+- **Typed, open property shapes.** Each view's `properties` is typed with the keys a well-formed object of its kind carries (`target.properties.productType` autocompletes), intersected with the document's open index signature, so arbitrary keys like `INFOPLIST_KEY_*` settings stay first-class. The shapes describe well-formed documents; reads from untrusted input should go through the narrowing accessors, which never trust them at runtime.
 - **Two verb families.** `add*` wires something to its owner (a dependency, a package, a framework, a synchronized folder) and is idempotent: re-adding returns the existing wiring. `ensure*` returns a structural container, creating it when missing (a build phase, a group chain, the Products group). Both families can therefore run unconditionally in scaffold and repair flows.
 - **Deterministic identifiers.** New objects get ids derived from what they are (`XX` + 20 digest characters + `XX`, from an embedded hash), so programmatic edits are reproducible run to run and diffs stay minimal. Collisions within a document resolve deterministically, and identical edit sequences produce byte-identical documents.
 - **Soft reads, loud writes.** Real-world projects can be malformed, so lookups return `undefined` where a document could omit something. Operations that cannot proceed without structure (no root project object, an unknown product type, a view whose object was deleted) throw `XcodeModelError`.
@@ -235,7 +247,7 @@ Measured on an Apple M5 Max, Node.js 24, single thread, with `@bacons/xcode` 1.0
 - The committed fixture corpus spans project generations from Xcode 3 to Xcode 16, captured from real projects with identifiers neutralized: synchronized folders with both exception-set kinds, classic groups, variant groups, aggregate and legacy targets, reference proxies, build rules, Swift packages, and a ~100 KiB multiplatform framework project.
 - Documents already in current Xcode's layout must round-trip byte for byte; documents from other tool generations must normalize to a byte-stable fixed point with unchanged values.
 - On macOS, the suite cross-validates every fixture and its rebuilt form with `plutil`, Apple's own property list parser and the empirical ground truth for what Apple tooling accepts.
-- A corpus sweep (`pnpm corpus`) walks every Xcode project on the machine, verifies each one parses and reaches a byte-stable fixed point, and cross-validates a sample of parsed values against plutil's own reading.
+- A corpus sweep (`pnpm corpus`) walks every Xcode project on the machine, verifies each one parses and reaches a byte-stable fixed point, and cross-validates a sample of parsed values against plutil's own reading. The sweep also exercises the object model against every project: the validator runs on each, and where a main application target resolves, a canonical edit sequence (setting write, probe target with dependency and embedding, full teardown) must keep the document byte-stable, with a slice of mutated output re-checked through plutil.
 - CI runs the full gate on Linux and macOS, and executes the built artifact on the oldest supported Node to enforce the `engines` floor.
 
 ## Releasing

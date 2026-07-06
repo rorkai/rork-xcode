@@ -11,6 +11,7 @@
 
 import { FILE_TYPE_BY_EXTENSION, Isa } from "./isa";
 import { XcodeObject } from "./object";
+import type { BuildPhaseProperties, GroupProperties, SyncRootGroupProperties } from "./properties";
 import type { NativeTarget } from "./target";
 import { ensureArray, stringItems } from "./values";
 
@@ -18,7 +19,7 @@ import { ensureArray, stringItems } from "./values";
  * A `PBXGroup`: a folder in Xcode's navigator holding references to files
  * and other groups.
  */
-export class Group extends XcodeObject {
+export class Group extends XcodeObject<GroupProperties> {
   /**
    * Ids of the group's children, in navigator order. Non-string entries of
    * a malformed document are skipped.
@@ -114,7 +115,7 @@ export class Group extends XcodeObject {
  * Any `PBX*BuildPhase`: an ordered list of build files processed by one
  * step of a target's build.
  */
-export class BuildPhase extends XcodeObject {
+export class BuildPhase extends XcodeObject<BuildPhaseProperties> {
   /**
    * The phase's display name, when it carries an explicit one. Xcode names
    * copy-files and shell-script phases; the standard phases derive their
@@ -203,7 +204,7 @@ export class BuildPhase extends XcodeObject {
  * A `PBXFileSystemSynchronizedRootGroup`: an Xcode 16 folder whose members
  * are synchronized from disk instead of listed individually.
  */
-export class SyncRootGroup extends XcodeObject {
+export class SyncRootGroup extends XcodeObject<SyncRootGroupProperties> {
   /**
    * The group's on-disk folder path, when present.
    */

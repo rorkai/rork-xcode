@@ -9,7 +9,14 @@
  * Per file, the sweep verifies:
  *
  * - the document parses;
- * - a parse → build → parse cycle reaches a byte-stable fixed point;
+ * - a parse, build, parse cycle reaches a byte-stable fixed point;
+ * - the object model's validator runs (structural issues found in the wild
+ *   are reported as statistics, not failures);
+ * - where a main application target resolves, the model applies a
+ *   canonical edit sequence (a setting write, a probe extension with
+ *   dependency and embedding, then a full teardown) and the mutated and
+ *   restored documents must stay byte-stable fixed points, with a slice of
+ *   mutated output re-checked through plutil;
  * - the parsed values agree with plutil's own reading of the document
  *   (sampled; OpenStep scalars are untyped, so values compare as text).
  *
@@ -30,7 +37,16 @@ import { promisify } from "node:util";
 
 import { parsePlist, type PlistValue } from "rork-plist";
 
-import { buildPbxproj, parsePbxproj, PbxprojParseError, type PbxprojObject, type PbxprojValue } from "../dist/index.js";
+import {
+  buildPbxproj,
+  parsePbxproj,
+  PbxprojParseError,
+  ProductType,
+  XcodeModelError,
+  XcodeProject,
+  type PbxprojObject,
+  type PbxprojValue,
+} from "../dist/index.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -213,6 +229,66 @@ for (const path of paths) {
   counts.set(outcome, (counts.get(outcome) ?? 0) + 1);
 }
 
+// Model exercise: on every parsed project, run the validator, and where a
+// main application target resolves, apply the canonical edit sequence
+// (write a setting, scaffold a probe extension with dependency and
+// embedding, then tear it down) and require the mutated document to stay a
+// byte-stable fixed point. Structural problems in the wild are reported as
+// statistics, not findings; only unexpected model errors and instability
+// fail the run.
+console.log("exercising the object model on every parsed project...");
+const issueCounts = new Map<string, number>();
+let modelExercised = 0;
+let modelMutated = 0;
+const mutatedSample: string[] = [];
+
+for (const file of parsed) {
+  let project: XcodeProject;
+  try {
+    project = XcodeProject.fromDocument(structuredClone(file.value) as PbxprojObject);
+    for (const issue of project.validate()) {
+      issueCounts.set(issue.kind, (issueCounts.get(issue.kind) ?? 0) + 1);
+    }
+    modelExercised += 1;
+  } catch (error) {
+    if (error instanceof XcodeModelError) {
+      issueCounts.set("model-unsupported", (issueCounts.get("model-unsupported") ?? 0) + 1);
+      continue;
+    }
+    findings.push(`${file.path}: validate threw unexpectedly, ${String(error)}`);
+    continue;
+  }
+
+  try {
+    const app = project.findMainAppTarget("ios");
+    if (app == null) {
+      continue;
+    }
+    app.setBuildSetting("RORK_XCODE_PROBE", "1");
+    const probe = project.addNativeTarget({ name: "RorkXcodeProbe", productType: ProductType.appExtension });
+    app.addDependency(probe);
+    app.embed(probe);
+    const mutated = project.build();
+    if (buildPbxproj(parsePbxproj(mutated) as PbxprojObject) !== mutated) {
+      findings.push(`${file.path}: mutated document is not a fixed point`);
+      continue;
+    }
+    project.removeTarget(probe);
+    app.removeBuildSetting("RORK_XCODE_PROBE");
+    const restored = project.build();
+    if (buildPbxproj(parsePbxproj(restored) as PbxprojObject) !== restored) {
+      findings.push(`${file.path}: document after teardown is not a fixed point`);
+      continue;
+    }
+    modelMutated += 1;
+    mutatedSample.push(mutated);
+  } catch (error) {
+    if (!(error instanceof XcodeModelError)) {
+      findings.push(`${file.path}: model mutation threw unexpectedly, ${String(error)}`);
+    }
+  }
+}
+
 // Differential sample: every k-th parsed file, spreading the sample across
 // the corpus instead of front-loading whatever the walk found first.
 const step = Math.max(1, Math.floor(parsed.length / options.sample));
@@ -240,9 +316,41 @@ for (const file of differentialSample) {
   }
 }
 
+// A slice of mutated documents also passes through plutil, proving Apple
+// tooling accepts what the model writes into real projects.
+const mutatedStep = Math.max(1, Math.floor(mutatedSample.length / Math.min(options.sample, 50)));
+const mutatedChecks = mutatedSample.filter((_, index) => index % mutatedStep === 0).slice(0, 50);
+let mutatedAccepted = 0;
+if (process.platform === "darwin") {
+  const { mkdtemp, rm, writeFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const directory = await mkdtemp(join(tmpdir(), "rork-xcode-corpus-"));
+  try {
+    for (const [index, text] of mutatedChecks.entries()) {
+      const file = join(directory, `${index}.pbxproj`);
+      await writeFile(file, text);
+      if (await plutilAccepts(file)) {
+        mutatedAccepted += 1;
+      } else {
+        findings.push(`mutated sample ${index}: plutil rejects the model's output`);
+      }
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
 console.log("\n=== fidelity ===");
 for (const [outcome, count] of [...counts.entries()].toSorted((a, b) => b[1] - a[1])) {
   console.log(`  ${outcome.padEnd(20)} ${String(count).padStart(6)}`);
+}
+
+console.log("\n=== object model ===");
+console.log(`  validated            ${String(modelExercised).padStart(6)}`);
+console.log(`  mutated + restored   ${String(modelMutated).padStart(6)}`);
+console.log(`  plutil on mutated    ${String(mutatedAccepted).padStart(6)} of ${mutatedChecks.length}`);
+for (const [kind, count] of [...issueCounts.entries()].toSorted((a, b) => b[1] - a[1])) {
+  console.log(`  issues: ${kind.padEnd(20)} ${String(count).padStart(6)}`);
 }
 
 console.log(`\n=== plutil differential ===\n  agreed on ${agreed} of ${differentialSample.length} compared files`);
@@ -254,4 +362,6 @@ if (findings.length > 0) {
   }
   process.exit(1);
 }
-console.log("\nno findings: every readable project parses, round-trips stably, and agrees with plutil");
+console.log(
+  "\nno findings: every readable project parses, round-trips stably, agrees with plutil, and survives model edits",
+);
