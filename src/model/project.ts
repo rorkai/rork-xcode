@@ -260,8 +260,8 @@ export class XcodeProject {
   /**
    * The view of the document's root `PBXProject` object.
    *
-   * @throws XcodeModelError when `rootObject` is missing or dangling —
-   *   without it no project-level operation is meaningful.
+   * @throws XcodeModelError when `rootObject` is missing or dangling,
+   *   since without it no project-level operation is meaningful.
    */
   get rootProject(): RootProject {
     const view = this.get(asString(this.document["rootObject"]));

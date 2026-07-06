@@ -85,45 +85,108 @@ try {
 
 Booleans are rejected on purpose. The format has no boolean notation (Xcode models flags as the strings `"YES"` and `"NO"`), so writing one would produce a value Xcode misreads.
 
-### `XcodeProject` — the object model
+## Object model
 
-Typed, mutable access to a parsed project: targets, build settings, build phases, dependencies, embedding, file-system-synchronized folders, and Swift packages.
+`XcodeProject` gives typed, mutable access to a parsed project. It is a set of lightweight views over the plain parsed document: all state lives in the document itself, a view holds only an object id, and `build()` serializes whatever the document currently says in Xcode's canonical layout. Model calls and direct dictionary access compose freely, and the model adds no measurable overhead over the raw functions (`XcodeProject.parse` and `project.build()` benchmark identically to `parsePbxproj` and `buildPbxproj`).
 
 ```ts
-import { ProductType, XcodeProject } from "rork-xcode";
+import { XcodeProject } from "rork-xcode";
 
 const project = XcodeProject.parse(pbxprojText);
+const text = project.build();
+```
 
-// Read and write build settings with project-level inheritance.
-const app = project.findMainAppTarget("ios");
+### Targets and build settings
+
+`getBuildSetting` resolves hierarchically the way Xcode does: the target's default configuration first, then the project-level configuration. Writes go to every configuration of the target, so Debug and Release stay consistent.
+
+```ts
+const app = project.findMainAppTarget("ios"); // "macos" | "tvos" | "watchos" | "visionos"
+app?.getBuildSetting("PRODUCT_BUNDLE_IDENTIFIER"); // "com.example.app"
+app?.getBuildSetting("SDKROOT"); // inherited from the project configuration
 app?.setBuildSetting("MARKETING_VERSION", "1.2.0");
+app?.removeBuildSetting("CODE_SIGN_IDENTITY");
 
-// Scaffold a widget extension the way Xcode would.
+for (const target of project.nativeTargets()) {
+  console.log(target.name, target.productType);
+}
+```
+
+### Scaffolding a target
+
+`addNativeTarget` creates the configurations, the product reference in the Products group, and the standard Sources, Frameworks, and Resources phases. Dependencies wire the container proxy pair Xcode uses; `embed` picks the right copy-files phase and destination for the product type (foundation extensions, ExtensionKit extensions, App Clips, watch content).
+
+```ts
+import { ProductType } from "rork-xcode";
+
 const widget = project.addNativeTarget({
   name: "DemoWidget",
   productType: ProductType.appExtension,
   buildSettings: { PRODUCT_BUNDLE_IDENTIFIER: "com.example.app.widget" },
 });
-app?.addDependency(widget);
-app?.embed(widget);
-widget.addSyncGroup("DemoWidget").addMembershipExceptions(widget, ["Info.plist"]);
+widget.setBuildSetting("IPHONEOS_DEPLOYMENT_TARGET", "18.0");
 
-// Link a Swift package product.
-const pkg = project.addSwiftPackage({
-  repositoryURL: "https://github.com/example/example-kit",
-  requirement: { kind: "upToNextMajorVersion", minimumVersion: "2.0.0" },
-});
-app?.addSwiftPackageProduct({ productName: "ExampleKit", packageReference: pkg });
+app.addDependency(widget);
+app.embed(widget); // "Embed Foundation Extensions", dstSubfolderSpec 13
 
-const text = project.build();
+// Xcode 16 synchronized folder, with the scaffolded Info.plist excluded
+// so the build does not copy it twice.
+const folder = widget.addSyncGroup("DemoWidget");
+folder.addMembershipExceptions(widget, ["Info.plist"]);
 ```
 
-The model is a set of lightweight views over the plain parsed document. All state lives in the document itself, so model calls and direct dictionary access compose freely, and `build()` always serializes the current state in Xcode's canonical layout. The design choices that matter:
+### Swift packages
 
-- **Deterministic identifiers.** New objects get ids derived from what they are (`XX` + 20 digest characters + `XX`, from an embedded hash), so programmatic edits are reproducible run to run and diffs stay minimal. Collisions within a document resolve deterministically.
-- **Soft reads, loud writes.** User-generated projects can be malformed, so lookups return `undefined` where a document could omit something. Operations that cannot proceed without structure (no root project object, an unknown product type, a view whose object was deleted) throw `XcodeModelError`.
-- **Hierarchical build settings.** `getBuildSetting` reads the target's default configuration and inherits from the project-level configuration, the way Xcode resolves settings; `setBuildSetting` writes every configuration so Debug and Release stay consistent.
-- **Idempotent wiring.** Dependencies, embed phases, package products, and build files deduplicate on re-application, so repair flows can run unconditionally.
+```ts
+const pkg =
+  project.findSwiftPackage("https://github.com/example/example-kit") ??
+  project.addSwiftPackage({
+    repositoryURL: "https://github.com/example/example-kit",
+    requirement: { kind: "upToNextMajorVersion", minimumVersion: "2.0.0" },
+  });
+
+// Wires the product dependency and its Frameworks-phase build file.
+app.addSwiftPackageProduct({ productName: "ExampleKit", packageReference: pkg });
+app.ensureSystemFramework("Messages"); // System/Library/Frameworks/Messages.framework
+```
+
+### Files, groups, and phases
+
+```ts
+import { Isa } from "rork-xcode";
+
+// Classic (non-synchronized) file management.
+const mainGroup = project.rootProject.mainGroup();
+const file = mainGroup?.createFile("Sources/Config.swift");
+if (file) app.ensureSourcesPhase().ensureBuildFile(file);
+
+project.findFileReference("Sources/Config.swift"); // resolves through the group tree
+
+// Phases expose their build files for reorganization.
+const embedPhase = app.findBuildPhase(Isa.copyFilesBuildPhase, "Embed Foundation Extensions");
+embedPhase?.buildFileIds;
+```
+
+### Escape hatch
+
+Every view exposes its raw dictionary, so anything the typed surface does not cover stays one property away, and `project.objects()` iterates every object with its typed view:
+
+```ts
+app.properties["productName"] = "RenamedApp";
+
+for (const [id, object] of project.objects()) {
+  if (object.isa === "PBXShellScriptBuildPhase") {
+    console.log(id, object.getString("name"));
+  }
+}
+```
+
+### Semantics
+
+- **Deterministic identifiers.** New objects get ids derived from what they are (`XX` + 20 digest characters + `XX`, from an embedded hash), so programmatic edits are reproducible run to run and diffs stay minimal. Collisions within a document resolve deterministically, and identical edit sequences produce byte-identical documents.
+- **Soft reads, loud writes.** Real-world projects can be malformed, so lookups return `undefined` where a document could omit something. Operations that cannot proceed without structure (no root project object, an unknown product type, a view whose object was deleted) throw `XcodeModelError`.
+- **Idempotent wiring.** Dependencies, embed phases, package products, synchronized folders, and build files deduplicate on re-application, so scaffold and repair flows can run unconditionally.
+- **Identity-mapped views.** Two lookups of the same id return the same instance, so views compare with `===`.
 
 ## Performance
 

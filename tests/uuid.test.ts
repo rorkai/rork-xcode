@@ -7,9 +7,9 @@ test("formats ids as XX plus twenty digest characters plus XX", () => {
   expect(id).toHaveLength(24);
   expect(id).toMatch(/^XX[0-9A-F]{20}XX$/);
 
-  // The digest characters are the first twenty of md5(seed), which keeps
-  // ids compatible with documents produced by earlier Rork tooling that
-  // used the same scheme.
+  // The digest characters are the first twenty of md5(seed). Pinning the
+  // exact mapping keeps generated ids stable across releases, so documents
+  // produced by different versions of this library agree.
   const digest = createHash("md5").update("test-seed").digest("hex").toUpperCase();
   expect(id).toBe(`XX${digest.slice(0, 20)}XX`);
 });

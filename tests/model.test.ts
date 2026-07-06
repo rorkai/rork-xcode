@@ -23,9 +23,10 @@ function openApp(): XcodeProject {
 }
 
 /**
- * Scaffolds a widget extension into the sample app the way the Rork agent
- * does: create the target, configure it, wire the dependency, embed it,
- * and synchronize its folder with an Info.plist membership exception.
+ * Scaffolds a widget extension into the sample app the way Xcode's own
+ * target template does: create the target, configure it, wire the
+ * dependency, embed it, and synchronize its folder with an Info.plist
+ * membership exception.
  */
 function scaffoldWidget(project: XcodeProject): {
   host: NativeTarget;
