@@ -89,6 +89,8 @@ Booleans are rejected on purpose. The format has no boolean notation (Xcode mode
 
 `XcodeProject` gives typed, mutable access to a parsed project. It is a set of lightweight views over the plain parsed document: all state lives in the document itself, a view holds only an object id, and `build()` serializes whatever the document currently says in Xcode's canonical layout. Model calls and direct dictionary access compose freely, and the model adds no measurable overhead over the raw functions (`XcodeProject.parse` and `project.build()` benchmark identically to `parsePbxproj` and `buildPbxproj`).
 
+This document-first design is deliberate, and the library's guarantees fall out of it. There is no inflate step on parse and no deflate step on build, so an untouched project rebuilds byte-identically and an edit changes only the entries it touches. Combined with deterministic identifiers, the same edit sequence produces the same bytes on every run, on every runtime.
+
 ```ts
 import { XcodeProject } from "rork-xcode";
 
@@ -109,6 +111,16 @@ app?.removeBuildSetting("CODE_SIGN_IDENTITY");
 
 for (const target of project.nativeTargets()) {
   console.log(target.name, target.productType);
+}
+```
+
+`project.targets()` returns every target kind. Aggregate targets (`PBXAggregateTarget`) and legacy external-build-tool targets (`PBXLegacyTarget`) share the full target surface: configurations and build settings, build phases, and dependency wiring.
+
+```ts
+for (const target of project.targets()) {
+  if (target instanceof LegacyTarget) {
+    console.log(target.name, target.buildToolPath);
+  }
 }
 ```
 
@@ -210,6 +222,7 @@ for (const [id, object] of project.objects()) {
 
 ### Semantics
 
+- **Typed vocabulary, generic fallback.** Native, aggregate, and legacy targets, groups and variant groups, Xcode 16 synchronized folders and their exception sets, build phases and build rules, Core Data version groups, and cross-project reference proxies come back as typed views. Every other kind is a generic `XcodeObject` with the same read and write access, so nothing in a document is out of reach.
 - **Typed, open property shapes.** Known keys autocomplete (`target.properties.productType`) and the shape stays open, so keys like `INFOPLIST_KEY_*` settings remain first-class. The shapes describe well-formed documents. When reading untrusted input, use the narrowing accessors, which never trust them.
 - **Two verb families.** `add*` wires something to its owner (a dependency, a package, a framework, a synchronized folder) and is idempotent: re-adding returns the existing wiring. `ensure*` returns a structural container, creating it when missing (a build phase, a group chain, the Products group). Both families can therefore run unconditionally in scaffold and repair flows.
 - **Deterministic identifiers.** New objects get ids derived from what they are (`XX` + 20 digest characters + `XX`, from an embedded hash), so programmatic edits are reproducible run to run and diffs stay minimal. Collisions within a document resolve deterministically, and identical edit sequences produce byte-identical documents.

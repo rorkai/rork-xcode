@@ -14,7 +14,9 @@
  * gives typed access to.
  */
 export const Isa = {
+  aggregateTarget: "PBXAggregateTarget",
   buildFile: "PBXBuildFile",
+  buildRule: "PBXBuildRule",
   containerItemProxy: "PBXContainerItemProxy",
   copyFilesBuildPhase: "PBXCopyFilesBuildPhase",
   fileReference: "PBXFileReference",
@@ -22,16 +24,20 @@ export const Isa = {
   fileSystemSynchronizedRootGroup: "PBXFileSystemSynchronizedRootGroup",
   frameworksBuildPhase: "PBXFrameworksBuildPhase",
   group: "PBXGroup",
+  legacyTarget: "PBXLegacyTarget",
   nativeTarget: "PBXNativeTarget",
   project: "PBXProject",
+  referenceProxy: "PBXReferenceProxy",
   resourcesBuildPhase: "PBXResourcesBuildPhase",
   sourcesBuildPhase: "PBXSourcesBuildPhase",
   targetDependency: "PBXTargetDependency",
+  variantGroup: "PBXVariantGroup",
   buildConfiguration: "XCBuildConfiguration",
   configurationList: "XCConfigurationList",
   localSwiftPackageReference: "XCLocalSwiftPackageReference",
   remoteSwiftPackageReference: "XCRemoteSwiftPackageReference",
   swiftPackageProductDependency: "XCSwiftPackageProductDependency",
+  versionGroup: "XCVersionGroup",
 } as const;
 
 /**

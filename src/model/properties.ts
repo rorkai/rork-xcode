@@ -48,19 +48,54 @@ export interface BuildSettings extends PbxprojObject {
 }
 
 /**
- * Properties of a `PBXNativeTarget`.
+ * Properties shared by every `PBX*Target` kind: native, aggregate, and
+ * legacy targets all carry a name, a configuration list, build phases,
+ * and dependencies.
  */
-export interface NativeTargetProperties extends PbxprojObject {
+export interface TargetProperties extends PbxprojObject {
   buildConfigurationList?: string;
   buildPhases?: string[];
-  buildRules?: string[];
   dependencies?: string[];
-  fileSystemSynchronizedGroups?: string[];
   name?: string;
-  packageProductDependencies?: string[];
   productName?: string;
+}
+
+/**
+ * Properties of a `PBXNativeTarget`.
+ */
+export interface NativeTargetProperties extends TargetProperties {
+  buildRules?: string[];
+  fileSystemSynchronizedGroups?: string[];
+  packageProductDependencies?: string[];
   productReference?: string;
   productType?: string;
+}
+
+/**
+ * Properties of a `PBXLegacyTarget`, a target that shells out to an
+ * external build tool such as make.
+ */
+export interface LegacyTargetProperties extends TargetProperties {
+  buildArgumentsString?: string;
+  buildToolPath?: string;
+  buildWorkingDirectory?: string;
+  passBuildSettingsInEnvironment?: number;
+}
+
+/**
+ * Properties of a `PBXBuildRule`, a per-target rule mapping a file kind to
+ * the compiler or script that processes it.
+ */
+export interface BuildRuleProperties extends PbxprojObject {
+  compilerSpec?: string;
+  filePatterns?: string;
+  fileType?: string;
+  inputFiles?: string[];
+  isEditable?: number;
+  name?: string;
+  outputFiles?: string[];
+  runOncePerArchitecture?: number;
+  script?: string;
 }
 
 /**
@@ -86,6 +121,28 @@ export interface GroupProperties extends PbxprojObject {
   children?: string[];
   name?: string;
   path?: string;
+  sourceTree?: string;
+}
+
+/**
+ * Properties of an `XCVersionGroup`, the container of a versioned Core
+ * Data model (`.xcdatamodeld`). Its children are the model versions and
+ * `currentVersion` names the active one.
+ */
+export interface VersionGroupProperties extends GroupProperties {
+  currentVersion?: string;
+  versionGroupType?: string;
+}
+
+/**
+ * Properties of a `PBXReferenceProxy`, the stand-in for a product built
+ * by a target of another project referenced from this one.
+ */
+export interface ReferenceProxyProperties extends PbxprojObject {
+  fileType?: string;
+  name?: string;
+  path?: string;
+  remoteRef?: string;
   sourceTree?: string;
 }
 

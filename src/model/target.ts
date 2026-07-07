@@ -1,6 +1,7 @@
 /**
- * The `PBXNativeTarget` view: build settings, phases, dependencies,
- * embedding, synchronized folders, and Swift package products.
+ * The target views: native, aggregate, and legacy targets with their
+ * build settings, phases, dependencies, embedding, synchronized folders,
+ * and Swift package products.
  *
  * Reads are deliberately soft: user-generated projects can be malformed,
  * so lookups return `undefined` instead of throwing wherever a document
@@ -12,60 +13,25 @@
 
 import { embedDestinationFor, Isa, ProductType } from "./isa";
 import { XcodeObject } from "./object";
-import { BuildPhase, SyncRootGroup } from "./objects";
+import { BuildPhase, BuildRule, SyncRootGroup } from "./objects";
 import { configurationsOf, defaultConfigurationSettingsOf } from "./settings";
 import { asDictionary, asString, ensureArray, stringItems } from "./values";
 
 import type { PbxprojObject } from "../types";
-import type { NativeTargetProperties } from "./properties";
+import type { LegacyTargetProperties, NativeTargetProperties, TargetProperties } from "./properties";
 
 /**
- * A native target: an application, extension, or other product the project
- * builds.
+ * Behavior shared by every target kind: configurations and build
+ * settings, build phases, and dependencies. `PBXNativeTarget`,
+ * `PBXAggregateTarget`, and `PBXLegacyTarget` all extend this view, so
+ * code that walks or rewires targets can accept any of them.
  */
-export class NativeTarget extends XcodeObject<NativeTargetProperties> {
+export class Target<Properties extends TargetProperties = TargetProperties> extends XcodeObject<Properties> {
   /**
    * The target's name, when present.
    */
   get name(): string | undefined {
     return this.getString("name");
-  }
-
-  /**
-   * The target's product type identifier, for example
-   * `com.apple.product-type.application`.
-   */
-  get productType(): string | undefined {
-    return this.getString("productType");
-  }
-
-  /**
-   * Rewrites the target's product type. Used by packaging repairs that
-   * convert foundation extensions into ExtensionKit extensions.
-   */
-  set productType(value: string) {
-    this.properties["productType"] = value;
-  }
-
-  /**
-   * The view of the target's product file reference, when the target has
-   * one.
-   */
-  get productReference(): XcodeObject | undefined {
-    const id = this.getString("productReference");
-    return id == null ? undefined : this.project.get(id);
-  }
-
-  /**
-   * Whether the target builds for watchOS, decided by its product type or
-   * its watchOS deployment-target setting.
-   */
-  isWatchOS(): boolean {
-    if (this.productType === ProductType.watchApp) {
-      return true;
-    }
-    const defaultSettings = this.defaultConfigurationSettings();
-    return defaultSettings != null && "WATCHOS_DEPLOYMENT_TARGET" in defaultSettings;
   }
 
   /**
@@ -140,24 +106,6 @@ export class NativeTarget extends XcodeObject<NativeTargetProperties> {
   }
 
   /**
-   * The views of the target's Swift package product dependencies, in
-   * declaration order.
-   */
-  packageProductDependencies(): XcodeObject[] {
-    return this.referencedViews("packageProductDependencies");
-  }
-
-  /**
-   * The views of the target's file-system-synchronized folders, in
-   * declaration order.
-   */
-  syncGroups(): SyncRootGroup[] {
-    return this.referencedViews("fileSystemSynchronizedGroups").filter(
-      (view): view is SyncRootGroup => view instanceof SyncRootGroup,
-    );
-  }
-
-  /**
    * The views of the target's build phases, in build order.
    */
   buildPhases(): BuildPhase[] {
@@ -212,27 +160,6 @@ export class NativeTarget extends XcodeObject<NativeTargetProperties> {
   }
 
   /**
-   * The target's sources phase, created when missing.
-   */
-  ensureSourcesPhase(): BuildPhase {
-    return this.ensureBuildPhase(Isa.sourcesBuildPhase);
-  }
-
-  /**
-   * The target's frameworks phase, created when missing.
-   */
-  ensureFrameworksPhase(): BuildPhase {
-    return this.ensureBuildPhase(Isa.frameworksBuildPhase);
-  }
-
-  /**
-   * The target's resources phase, created when missing.
-   */
-  ensureResourcesPhase(): BuildPhase {
-    return this.ensureBuildPhase(Isa.resourcesBuildPhase);
-  }
-
-  /**
    * The target's shell-script phase with the given name, created with the
    * usual defaults (`/bin/sh`, empty input and output lists) when missing.
    * The script and other properties apply only on creation.
@@ -260,7 +187,7 @@ export class NativeTarget extends XcodeObject<NativeTargetProperties> {
    *
    * @returns The view of the target dependency object.
    */
-  addDependency(dependency: NativeTarget): XcodeObject {
+  addDependency(dependency: Target): XcodeObject {
     for (const id of stringItems(this.properties["dependencies"])) {
       const existing = this.project.get(id);
       if (existing?.getString("target") === dependency.id) {
@@ -288,6 +215,96 @@ export class NativeTarget extends XcodeObject<NativeTargetProperties> {
     );
     ensureArray(this.properties, "dependencies").push(targetDependency.id);
     return targetDependency;
+  }
+}
+
+/**
+ * A native target: an application, extension, or other product the
+ * project compiles and packages itself.
+ */
+export class NativeTarget extends Target<NativeTargetProperties> {
+  /**
+   * The target's product type identifier, for example
+   * `com.apple.product-type.application`.
+   */
+  get productType(): string | undefined {
+    return this.getString("productType");
+  }
+
+  /**
+   * Rewrites the target's product type. Used by packaging repairs that
+   * convert foundation extensions into ExtensionKit extensions.
+   */
+  set productType(value: string) {
+    this.properties["productType"] = value;
+  }
+
+  /**
+   * The view of the target's product file reference, when the target has
+   * one.
+   */
+  get productReference(): XcodeObject | undefined {
+    const id = this.getString("productReference");
+    return id == null ? undefined : this.project.get(id);
+  }
+
+  /**
+   * Whether the target builds for watchOS, decided by its product type or
+   * its watchOS deployment-target setting.
+   */
+  isWatchOS(): boolean {
+    if (this.productType === ProductType.watchApp) {
+      return true;
+    }
+    const defaultSettings = this.defaultConfigurationSettings();
+    return defaultSettings != null && "WATCHOS_DEPLOYMENT_TARGET" in defaultSettings;
+  }
+
+  /**
+   * The views of the target's Swift package product dependencies, in
+   * declaration order.
+   */
+  packageProductDependencies(): XcodeObject[] {
+    return this.referencedViews("packageProductDependencies");
+  }
+
+  /**
+   * The views of the target's file-system-synchronized folders, in
+   * declaration order.
+   */
+  syncGroups(): SyncRootGroup[] {
+    return this.referencedViews("fileSystemSynchronizedGroups").filter(
+      (view): view is SyncRootGroup => view instanceof SyncRootGroup,
+    );
+  }
+
+  /**
+   * The views of the target's build rules, in evaluation order. Empty for
+   * targets without custom rules, which is nearly all of them.
+   */
+  buildRules(): BuildRule[] {
+    return this.referencedViews("buildRules").filter((view): view is BuildRule => view instanceof BuildRule);
+  }
+
+  /**
+   * The target's sources phase, created when missing.
+   */
+  ensureSourcesPhase(): BuildPhase {
+    return this.ensureBuildPhase(Isa.sourcesBuildPhase);
+  }
+
+  /**
+   * The target's frameworks phase, created when missing.
+   */
+  ensureFrameworksPhase(): BuildPhase {
+    return this.ensureBuildPhase(Isa.frameworksBuildPhase);
+  }
+
+  /**
+   * The target's resources phase, created when missing.
+   */
+  ensureResourcesPhase(): BuildPhase {
+    return this.ensureBuildPhase(Isa.resourcesBuildPhase);
   }
 
   /**
@@ -439,5 +456,41 @@ export class NativeTarget extends XcodeObject<NativeTargetProperties> {
 
     this.ensureFrameworksPhase().ensureBuildFile(reference);
     return reference;
+  }
+}
+
+/**
+ * An aggregate target: a target that produces nothing itself and exists
+ * to group other targets through its dependencies and to run script or
+ * copy-files phases. The shared target surface covers everything an
+ * aggregate target carries.
+ */
+export class AggregateTarget extends Target {}
+
+/**
+ * A legacy target: a target that shells out to an external build tool
+ * such as make instead of using Xcode's build system.
+ */
+export class LegacyTarget extends Target<LegacyTargetProperties> {
+  /**
+   * The build tool the target invokes, as an absolute path.
+   */
+  get buildToolPath(): string | undefined {
+    return this.getString("buildToolPath");
+  }
+
+  /**
+   * The arguments passed to the build tool, as one shell-style string.
+   */
+  get buildArgumentsString(): string | undefined {
+    return this.getString("buildArgumentsString");
+  }
+
+  /**
+   * The working directory the build tool runs in, when the target sets
+   * one.
+   */
+  get buildWorkingDirectory(): string | undefined {
+    return this.getString("buildWorkingDirectory");
   }
 }

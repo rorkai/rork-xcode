@@ -4,18 +4,35 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+  AggregateTarget,
   BuildPhase,
+  BuildRule,
   CopyFilesDestination,
   Isa,
+  LegacyTarget,
   ProductType,
+  ReferenceProxy,
+  VersionGroup,
   XcodeModelError,
   XcodeProject,
   type NativeTarget,
+  type PbxprojObject,
   type SyncRootGroup,
 } from "../src/index";
 
 function fixture(name: string): string {
   return readFileSync(new URL(`fixtures/${name}`, import.meta.url), "utf-8");
+}
+
+/**
+ * Appends an id to an object's list property, creating the list when
+ * missing. Tests register hand-built objects (aggregate targets, build
+ * rules) the way the model's own mutations do.
+ */
+function ensurePush(container: PbxprojObject, key: string, id: string): void {
+  const list = (container[key] ??= []);
+  assert(Array.isArray(list));
+  list.push(id);
 }
 
 function openApp(): XcodeProject {
@@ -605,6 +622,127 @@ describe("removal", () => {
     project.removeTarget(widget);
     expect(project.get(group.id)).toBeDefined();
     expect(second.syncGroupPaths()).toEqual(["DemoWidget"]);
+  });
+});
+
+describe("aggregate targets, legacy targets, and exotic references", () => {
+  it("types aggregate targets and gives them the shared target surface", () => {
+    const project = openApp();
+    const app = project.findMainAppTarget("ios");
+    assert(app);
+
+    const aggregate = project.add(Isa.aggregateTarget, { buildPhases: [], dependencies: [], name: "All" });
+    ensurePush(project.rootProject.properties, "targets", aggregate.id);
+    assert(aggregate instanceof AggregateTarget);
+
+    aggregate.addDependency(app);
+    aggregate.addDependency(app);
+    expect(aggregate.dependencies()).toHaveLength(1);
+
+    const script = aggregate.ensureShellScriptPhase("Run Checks", { shellScript: "true" });
+    expect(aggregate.buildPhases().map((phase) => phase.id)).toEqual([script.id]);
+    expect(project.targets().map((target) => target.name)).toContain("All");
+    expect(project.nativeTargets().map((target) => target.name)).not.toContain("All");
+    expect(project.validate()).toEqual([]);
+
+    // The cascading teardown handles non-native targets too.
+    const dependencyIds = aggregate.dependencies().map((dependency) => dependency.id);
+    project.removeTarget(aggregate);
+    expect(project.get(aggregate.id)).toBeUndefined();
+    for (const id of dependencyIds) {
+      expect(project.get(id)).toBeUndefined();
+    }
+    expect(project.validate()).toEqual([]);
+  });
+
+  it("types legacy targets with their build-tool properties", () => {
+    const project = openApp();
+    const legacy = project.add(Isa.legacyTarget, {
+      buildArgumentsString: "$(ACTION)",
+      buildToolPath: "/usr/bin/make",
+      buildWorkingDirectory: "vendor",
+      name: "Makefile",
+    });
+    ensurePush(project.rootProject.properties, "targets", legacy.id);
+
+    assert(legacy instanceof LegacyTarget);
+    expect(legacy.buildToolPath).toBe("/usr/bin/make");
+    expect(legacy.buildArgumentsString).toBe("$(ACTION)");
+    expect(legacy.buildWorkingDirectory).toBe("vendor");
+    expect(project.targets().map((target) => target.name)).toContain("Makefile");
+    expect(project.validate()).toEqual([]);
+  });
+
+  it("types build rules and lists them from their target", () => {
+    const project = openApp();
+    const app = project.findMainAppTarget("ios");
+    assert(app);
+
+    const rule = project.add(Isa.buildRule, {
+      compilerSpec: "com.apple.compilers.proxy.script",
+      filePatterns: "*.gen",
+      fileType: "pattern.proxy",
+      inputFiles: [],
+      isEditable: 1,
+      outputFiles: ["$(DERIVED_FILE_DIR)/$(INPUT_FILE_BASE).swift"],
+      script: "generate\n",
+    });
+    ensurePush(app.properties, "buildRules", rule.id);
+
+    const [typed] = app.buildRules();
+    assert(typed instanceof BuildRule);
+    expect(typed.script).toBe("generate\n");
+    expect(project.validate()).toEqual([]);
+  });
+
+  it("types version groups and switches the active Core Data model", () => {
+    const project = openApp();
+    const mainGroup = project.rootProject.mainGroup();
+    assert(mainGroup);
+
+    const v1 = project.add(Isa.fileReference, { path: "Model.xcdatamodel", sourceTree: "<group>" });
+    const v2 = project.add(Isa.fileReference, { path: "Model 2.xcdatamodel", sourceTree: "<group>" });
+    const group = project.add(Isa.versionGroup, {
+      children: [v1.id],
+      currentVersion: v1.id,
+      path: "Model.xcdatamodeld",
+      sourceTree: "<group>",
+      versionGroupType: "wrapper.xcdatamodel",
+    });
+    mainGroup.addChild(group);
+
+    assert(group instanceof VersionGroup);
+    expect(group.currentVersion()?.id).toBe(v1.id);
+
+    group.setCurrentVersion(v2);
+    expect(group.currentVersion()?.id).toBe(v2.id);
+    expect(group.childIds).toEqual([v1.id, v2.id]);
+    expect(project.validate()).toEqual([]);
+  });
+
+  it("types reference proxies and resolves their remote reference", () => {
+    const project = openApp();
+    const mainGroup = project.rootProject.mainGroup();
+    assert(mainGroup);
+
+    const remote = project.add(Isa.containerItemProxy, {
+      containerPortal: project.rootProject.id,
+      proxyType: 2,
+      remoteGlobalIDString: "0123456789ABCDEF01234567",
+      remoteInfo: "OtherLib",
+    });
+    const proxy = project.add(Isa.referenceProxy, {
+      fileType: "archive.ar",
+      path: "libOther.a",
+      remoteRef: remote.id,
+      sourceTree: "BUILT_PRODUCTS_DIR",
+    });
+    mainGroup.addChild(proxy);
+
+    assert(proxy instanceof ReferenceProxy);
+    expect(proxy.path).toBe("libOther.a");
+    expect(proxy.remoteReference()?.id).toBe(remote.id);
+    expect(project.validate()).toEqual([]);
   });
 });
 

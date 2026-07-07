@@ -1,6 +1,7 @@
 /**
- * Typed views over the document object kinds that are not targets: groups,
- * build phases, and file-system-synchronized groups.
+ * Typed views over the document object kinds that are not targets:
+ * groups, build phases, file-system-synchronized groups, build rules,
+ * version groups, and reference proxies.
  *
  * Each class adds the accessors and mutations its kind supports; everything
  * ultimately reads and writes the raw dictionaries through the base class,
@@ -13,14 +14,22 @@ import { FILE_TYPE_BY_EXTENSION, Isa } from "./isa";
 import { XcodeObject } from "./object";
 import { ensureArray, stringItems } from "./values";
 
-import type { BuildPhaseProperties, GroupProperties, SyncRootGroupProperties } from "./properties";
+import type {
+  BuildPhaseProperties,
+  BuildRuleProperties,
+  GroupProperties,
+  ReferenceProxyProperties,
+  SyncRootGroupProperties,
+  VersionGroupProperties,
+} from "./properties";
 import type { NativeTarget } from "./target";
 
 /**
- * A `PBXGroup`: a folder in Xcode's navigator holding references to files
- * and other groups.
+ * A `PBXGroup` or `PBXVariantGroup`: a folder in Xcode's navigator
+ * holding references to files and other groups. The type parameter lets
+ * subclasses carry a more specific property shape.
  */
-export class Group extends XcodeObject<GroupProperties> {
+export class Group<Properties extends GroupProperties = GroupProperties> extends XcodeObject<Properties> {
   /**
    * Ids of the group's children, in navigator order. Non-string entries of
    * a malformed document are skipped.
@@ -258,5 +267,67 @@ export class SyncRootGroup extends XcodeObject<SyncRootGroupProperties> {
     );
     ensureArray(this.properties, "exceptions").push(exceptionSet.id);
     return exceptionSet;
+  }
+}
+
+/**
+ * A `PBXBuildRule`: a per-target rule mapping a file kind to the compiler
+ * or script that processes it.
+ */
+export class BuildRule extends XcodeObject<BuildRuleProperties> {
+  /**
+   * The rule's script, when it is a script rule rather than a reference
+   * to a compiler specification.
+   */
+  get script(): string | undefined {
+    return this.getString("script");
+  }
+}
+
+/**
+ * An `XCVersionGroup`: the container of a versioned Core Data model
+ * (`.xcdatamodeld`). Its children are the model versions and
+ * `currentVersion` names the active one.
+ */
+export class VersionGroup extends Group<VersionGroupProperties> {
+  /**
+   * The view of the active model version's file reference, when the group
+   * names one.
+   */
+  currentVersion(): XcodeObject | undefined {
+    const id = this.getString("currentVersion");
+    return id == null ? undefined : this.project.get(id);
+  }
+
+  /**
+   * Makes a model version the active one, adding it to the group's
+   * children when it is not listed yet.
+   */
+  setCurrentVersion(reference: XcodeObject): void {
+    this.addChild(reference);
+    this.properties["currentVersion"] = reference.id;
+  }
+}
+
+/**
+ * A `PBXReferenceProxy`: the stand-in for a product built by a target of
+ * another project referenced from this one.
+ */
+export class ReferenceProxy extends XcodeObject<ReferenceProxyProperties> {
+  /**
+   * The proxy's product path inside the other project's build directory,
+   * when present.
+   */
+  get path(): string | undefined {
+    return this.getString("path");
+  }
+
+  /**
+   * The view of the container item proxy that names the remote target,
+   * when the reference resolves.
+   */
+  remoteReference(): XcodeObject | undefined {
+    const id = this.getString("remoteRef");
+    return id == null ? undefined : this.project.get(id);
   }
 }

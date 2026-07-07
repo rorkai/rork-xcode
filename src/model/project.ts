@@ -19,9 +19,9 @@ import { generateObjectId } from "../uuid";
 import { pruneOrphanObjects, validateProject, type ProjectIssue } from "./doctor";
 import { DEPLOYMENT_TARGET_KEY, Isa, PRODUCT_FILE_INFO, ProductType, type ApplePlatform } from "./isa";
 import { XcodeObject } from "./object";
-import { BuildPhase, Group, SyncRootGroup } from "./objects";
+import { BuildPhase, BuildRule, Group, ReferenceProxy, SyncRootGroup, VersionGroup } from "./objects";
 import { defaultConfigurationSettingsOf } from "./settings";
-import { NativeTarget } from "./target";
+import { AggregateTarget, LegacyTarget, NativeTarget, Target } from "./target";
 import { asDictionary, asString, ensureArray, stringItems } from "./values";
 
 import type { PbxprojObject, PbxprojValue } from "../types";
@@ -283,18 +283,26 @@ export class XcodeProject {
   }
 
   /**
-   * The views of the project's native targets, in project order. Targets
-   * of other kinds (aggregate and legacy targets) are not included.
+   * The views of the project's targets of every kind (native, aggregate,
+   * and legacy), in project order.
    */
-  nativeTargets(): NativeTarget[] {
-    const targets: NativeTarget[] = [];
+  targets(): Target[] {
+    const targets: Target[] = [];
     for (const id of this.rootProject.targetIds()) {
       const view = this.get(id);
-      if (view instanceof NativeTarget) {
+      if (view instanceof Target) {
         targets.push(view);
       }
     }
     return targets;
+  }
+
+  /**
+   * The views of the project's native targets, in project order. Targets
+   * of other kinds (aggregate and legacy targets) are not included.
+   */
+  nativeTargets(): NativeTarget[] {
+    return this.targets().filter((target): target is NativeTarget => target instanceof NativeTarget);
   }
 
   /**
@@ -561,7 +569,7 @@ export class XcodeProject {
    *   since removing by another document's ids would tear down unrelated
    *   objects that happen to share them.
    */
-  removeTarget(target: NativeTarget): void {
+  removeTarget(target: Target): void {
     if (target.project !== this) {
       throw new XcodeModelError("Cannot remove a target that belongs to another project");
     }
@@ -583,7 +591,7 @@ export class XcodeProject {
       ownedIds.add(configurationListId);
     }
 
-    const product = target.productReference;
+    const product = this.get(target.getString("productReference"));
     if (product != null) {
       for (const buildFile of this.buildFilesReferencing(product)) {
         ownedIds.add(buildFile.id);
@@ -690,14 +698,29 @@ export class XcodeProject {
     if (isa === Isa.nativeTarget) {
       return new NativeTarget(this, id);
     }
+    if (isa === Isa.aggregateTarget) {
+      return new AggregateTarget(this, id);
+    }
+    if (isa === Isa.legacyTarget) {
+      return new LegacyTarget(this, id);
+    }
     if (isa === Isa.project) {
       return new RootProject(this, id);
     }
-    if (isa === Isa.group || isa === "PBXVariantGroup") {
+    if (isa === Isa.group || isa === Isa.variantGroup) {
       return new Group(this, id);
+    }
+    if (isa === Isa.versionGroup) {
+      return new VersionGroup(this, id);
     }
     if (isa === Isa.fileSystemSynchronizedRootGroup) {
       return new SyncRootGroup(this, id);
+    }
+    if (isa === Isa.buildRule) {
+      return new BuildRule(this, id);
+    }
+    if (isa === Isa.referenceProxy) {
+      return new ReferenceProxy(this, id);
     }
     if (isa.endsWith("BuildPhase")) {
       return new BuildPhase(this, id);
