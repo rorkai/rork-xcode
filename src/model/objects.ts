@@ -1,7 +1,6 @@
 /**
- * Typed views over the document object kinds that are not targets:
- * groups, build phases, file-system-synchronized groups, build rules,
- * version groups, and reference proxies.
+ * Typed views over the document object kinds that are not targets, from
+ * groups and build phases to version groups and reference proxies.
  *
  * Each class adds the accessors and mutations its kind supports; everything
  * ultimately reads and writes the raw dictionaries through the base class,
@@ -25,9 +24,10 @@ import type {
 import type { NativeTarget } from "./target";
 
 /**
- * A `PBXGroup` or `PBXVariantGroup`: a folder in Xcode's navigator
- * holding references to files and other groups. The type parameter lets
- * subclasses carry a more specific property shape.
+ * A `PBXGroup` is a folder in Xcode's navigator, holding references to
+ * files and other groups. Variant groups (`PBXVariantGroup`) share this
+ * view. The type parameter lets subclasses carry a more specific property
+ * shape.
  */
 export class Group<Properties extends GroupProperties = GroupProperties> extends XcodeObject<Properties> {
   /**
@@ -122,8 +122,8 @@ export class Group<Properties extends GroupProperties = GroupProperties> extends
 }
 
 /**
- * Any `PBX*BuildPhase`: an ordered list of build files processed by one
- * step of a target's build.
+ * A build phase is an ordered list of build files processed by one step
+ * of a target's build. Every `PBX*BuildPhase` kind shares this view.
  */
 export class BuildPhase extends XcodeObject<BuildPhaseProperties> {
   /**
@@ -211,8 +211,8 @@ export class BuildPhase extends XcodeObject<BuildPhaseProperties> {
 }
 
 /**
- * A `PBXFileSystemSynchronizedRootGroup`: an Xcode 16 folder whose members
- * are synchronized from disk instead of listed individually.
+ * A `PBXFileSystemSynchronizedRootGroup` is an Xcode 16 folder whose
+ * members are synchronized from disk instead of listed individually.
  */
 export class SyncRootGroup extends XcodeObject<SyncRootGroupProperties> {
   /**
@@ -271,8 +271,8 @@ export class SyncRootGroup extends XcodeObject<SyncRootGroupProperties> {
 }
 
 /**
- * A `PBXBuildRule`: a per-target rule mapping a file kind to the compiler
- * or script that processes it.
+ * A `PBXBuildRule` tells a target which compiler or script processes a
+ * kind of file.
  */
 export class BuildRule extends XcodeObject<BuildRuleProperties> {
   /**
@@ -285,7 +285,7 @@ export class BuildRule extends XcodeObject<BuildRuleProperties> {
 }
 
 /**
- * An `XCVersionGroup`: the container of a versioned Core Data model
+ * An `XCVersionGroup` contains a versioned Core Data model
  * (`.xcdatamodeld`). Its children are the model versions and
  * `currentVersion` names the active one.
  */
@@ -310,7 +310,7 @@ export class VersionGroup extends Group<VersionGroupProperties> {
 }
 
 /**
- * A `PBXReferenceProxy`: the stand-in for a product built by a target of
+ * A `PBXReferenceProxy` stands in for a product built by a target of
  * another project referenced from this one.
  */
 export class ReferenceProxy extends XcodeObject<ReferenceProxyProperties> {

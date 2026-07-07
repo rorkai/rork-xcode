@@ -114,7 +114,7 @@ for (const target of project.nativeTargets()) {
 }
 ```
 
-`project.targets()` returns every target kind. Aggregate targets (`PBXAggregateTarget`) and legacy external-build-tool targets (`PBXLegacyTarget`) share the full target surface: configurations and build settings, build phases, and dependency wiring.
+`project.targets()` returns every target kind. Aggregate targets (`PBXAggregateTarget`) and legacy external-build-tool targets (`PBXLegacyTarget`) share the full target surface, from configurations and build settings to phases and dependency wiring.
 
 ```ts
 for (const target of project.targets()) {
@@ -222,7 +222,7 @@ for (const [id, object] of project.objects()) {
 
 ### Semantics
 
-- **Typed vocabulary, generic fallback.** Native, aggregate, and legacy targets, groups and variant groups, Xcode 16 synchronized folders and their exception sets, build phases and build rules, Core Data version groups, and cross-project reference proxies come back as typed views. Every other kind is a generic `XcodeObject` with the same read and write access, so nothing in a document is out of reach.
+- **Typed vocabulary, generic fallback.** The typed views cover targets of every kind, groups and variant groups, Xcode 16 synchronized folders and their exception sets, build phases and build rules, Core Data version groups, and cross-project reference proxies. Every other kind is a generic `XcodeObject` with the same read and write access, so nothing in a document is out of reach.
 - **Typed, open property shapes.** Known keys autocomplete (`target.properties.productType`) and the shape stays open, so keys like `INFOPLIST_KEY_*` settings remain first-class. The shapes describe well-formed documents. When reading untrusted input, use the narrowing accessors, which never trust them.
 - **Two verb families.** `add*` wires something to its owner (a dependency, a package, a framework, a synchronized folder) and is idempotent: re-adding returns the existing wiring. `ensure*` returns a structural container, creating it when missing (a build phase, a group chain, the Products group). Both families can therefore run unconditionally in scaffold and repair flows.
 - **Deterministic identifiers.** New objects get ids derived from what they are (`XX` + 20 digest characters + `XX`, from an embedded hash), so programmatic edits are reproducible run to run and diffs stay minimal. Collisions within a document resolve deterministically, and identical edit sequences produce byte-identical documents.

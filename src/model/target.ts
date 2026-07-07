@@ -1,7 +1,8 @@
 /**
- * The target views: native, aggregate, and legacy targets with their
- * build settings, phases, dependencies, embedding, synchronized folders,
- * and Swift package products.
+ * Views of the project's targets. The behavior all target kinds share
+ * lives on the {@link Target} base class, and {@link NativeTarget}
+ * extends it with products, embedding, synchronized folders, Swift
+ * packages, and system frameworks.
  *
  * Reads are deliberately soft: user-generated projects can be malformed,
  * so lookups return `undefined` instead of throwing wherever a document
@@ -21,10 +22,11 @@ import type { PbxprojObject } from "../types";
 import type { LegacyTargetProperties, NativeTargetProperties, TargetProperties } from "./properties";
 
 /**
- * Behavior shared by every target kind: configurations and build
- * settings, build phases, and dependencies. `PBXNativeTarget`,
- * `PBXAggregateTarget`, and `PBXLegacyTarget` all extend this view, so
- * code that walks or rewires targets can accept any of them.
+ * The behavior every target kind shares. A target of any kind carries
+ * build configurations and settings, build phases, and dependencies, and
+ * this class holds their accessors and mutations. `PBXNativeTarget`,
+ * `PBXAggregateTarget`, and `PBXLegacyTarget` all extend it, so code that
+ * walks or rewires targets can accept any of them.
  */
 export class Target<Properties extends TargetProperties = TargetProperties> extends XcodeObject<Properties> {
   /**
@@ -219,8 +221,8 @@ export class Target<Properties extends TargetProperties = TargetProperties> exte
 }
 
 /**
- * A native target: an application, extension, or other product the
- * project compiles and packages itself.
+ * A `PBXNativeTarget` is a product the project compiles and packages
+ * itself, such as an application or an app extension.
  */
 export class NativeTarget extends Target<NativeTargetProperties> {
   /**
@@ -309,9 +311,9 @@ export class NativeTarget extends Target<NativeTargetProperties> {
 
   /**
    * Embeds another target's product into this target through the
-   * copy-files phase for its product type: "Embed Foundation Extensions",
-   * "Embed App Clips", "Embed Watch Content", or "Embed ExtensionKit
-   * Extensions".
+   * copy-files phase its product type calls for ("Embed Foundation
+   * Extensions", "Embed App Clips", "Embed Watch Content", or "Embed
+   * ExtensionKit Extensions").
    *
    * An existing phase with the same name is reused, its destination is
    * repaired to the type's canonical values, and the product's build file
@@ -388,7 +390,7 @@ export class NativeTarget extends Target<NativeTargetProperties> {
   }
 
   /**
-   * Links a Swift package product to this target: creates the
+   * Links a Swift package product to this target. It creates the
    * `XCSwiftPackageProductDependency`, registers it on the target, and
    * ensures the frameworks phase carries its build file. Linking an
    * already linked product is a no-op.
@@ -425,7 +427,7 @@ export class NativeTarget extends Target<NativeTargetProperties> {
   }
 
   /**
-   * Links a system framework (for example `Messages`) to this target:
+   * Links a system framework (for example `Messages`) to this target. It
    * reuses or creates the file reference under the SDK's frameworks
    * directory and makes sure the frameworks phase carries its build file.
    * Linking an already linked framework is a no-op.
@@ -460,16 +462,15 @@ export class NativeTarget extends Target<NativeTargetProperties> {
 }
 
 /**
- * An aggregate target: a target that produces nothing itself and exists
- * to group other targets through its dependencies and to run script or
- * copy-files phases. The shared target surface covers everything an
- * aggregate target carries.
+ * An aggregate target produces nothing itself. It exists to group other
+ * targets through its dependencies and to run script or copy-files
+ * phases, and the shared target surface covers everything it carries.
  */
 export class AggregateTarget extends Target {}
 
 /**
- * A legacy target: a target that shells out to an external build tool
- * such as make instead of using Xcode's build system.
+ * A legacy target shells out to an external build tool such as make
+ * instead of using Xcode's build system.
  */
 export class LegacyTarget extends Target<LegacyTargetProperties> {
   /**

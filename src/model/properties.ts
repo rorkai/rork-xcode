@@ -48,9 +48,9 @@ export interface BuildSettings extends PbxprojObject {
 }
 
 /**
- * Properties shared by every `PBX*Target` kind: native, aggregate, and
- * legacy targets all carry a name, a configuration list, build phases,
- * and dependencies.
+ * Properties shared by every target kind. Native, aggregate, and legacy
+ * targets all carry a name, a configuration list, build phases, and
+ * dependencies.
  */
 export interface TargetProperties extends PbxprojObject {
   buildConfigurationList?: string;

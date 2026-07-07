@@ -1,5 +1,5 @@
 /**
- * The project document model: typed, mutable access to a parsed
+ * The project document model. It gives typed, mutable access to a parsed
  * `project.pbxproj`.
  *
  * The model is a set of lightweight views over the plain parsed document.
@@ -28,8 +28,8 @@ import type { PbxprojObject, PbxprojValue } from "../types";
 import type { RootProjectProperties } from "./properties";
 
 /**
- * The `PBXProject` object at the document root: the container that owns
- * the target list, the main group, and project-level configurations.
+ * The `PBXProject` object at the document root. It owns the target list,
+ * the main group, and the project-level configurations.
  */
 export class RootProject extends XcodeObject<RootProjectProperties> {
   /**
@@ -138,7 +138,7 @@ export class XcodeProject {
   private readonly objectsDictionary: PbxprojObject;
 
   /**
-   * Identity map of object views: one view per id, created on first
+   * Identity map of object views, one view per id, created on first
    * access, so views of the same object compare with `===`.
    */
   private readonly views = new Map<string, XcodeObject>();
@@ -313,7 +313,7 @@ export class XcodeProject {
   }
 
   /**
-   * Finds the main application target for a platform: prefers the
+   * Finds the main application target for a platform. It prefers the
    * application target whose own configurations carry the platform's
    * deployment-target key, and falls back to the first application target
    * in project order. Returns `undefined` when the project has no
@@ -515,8 +515,9 @@ export class XcodeProject {
 
   /**
    * The views of every object that references the id anywhere in its
-   * properties: a string property naming it, an id list containing it, or
-   * a nested dictionary carrying it as a key or string value.
+   * properties. A reference is a string property naming the id, an id
+   * list containing it, or a nested dictionary carrying it as a key or
+   * string value.
    *
    * The scan is linear over the document; removal flows call it once per
    * removed object, which keeps teardown proportional to what is actually
@@ -534,7 +535,7 @@ export class XcodeProject {
 
   /**
    * Removes an object from the document and strips every reference to it
-   * from the remaining objects: string properties naming the id are
+   * from the remaining objects. String properties naming the id are
    * deleted, id lists drop it, and nested dictionaries keyed by object id
    * (such as `TargetAttributes`) drop its entry.
    *
@@ -554,13 +555,13 @@ export class XcodeProject {
   }
 
   /**
-   * Removes a target and everything that exists only for its sake: its
-   * build phases and their build files, its configuration list and
-   * configurations, its product reference and the build files embedding
-   * it, dependency objects and container proxies in both directions
-   * (other targets' dependencies on it, and its own dependencies on
-   * others), its membership exception sets, and synchronized folders no
-   * remaining target links.
+   * Removes a target and everything that exists only for its sake. That
+   * covers its build phases and their build files, its configuration list
+   * and configurations, its product reference and the build files
+   * embedding it, dependency objects and container proxies in both
+   * directions (other targets' dependencies on it, and its own
+   * dependencies on others), its membership exception sets, and
+   * synchronized folders no remaining target links.
    *
    * On-disk sources are untouched; the removal is document-only, like
    * deleting a target in Xcode and keeping its folder.
@@ -738,9 +739,9 @@ function joinPath(prefix: string, segment: string): string {
 }
 
 /**
- * Whether a value references the id anywhere in its structure: a string
- * equal to it, an array containing it at any depth, or a dictionary
- * carrying it as a key or somewhere in its values.
+ * Whether a value references the id anywhere in its structure. A
+ * reference is a string equal to it, an array containing it at any depth,
+ * or a dictionary carrying it as a key or somewhere in its values.
  */
 function valueReferences(value: PbxprojValue | undefined, id: string): boolean {
   if (typeof value === "string") {
@@ -757,7 +758,7 @@ function valueReferences(value: PbxprojValue | undefined, id: string): boolean {
 }
 
 /**
- * Whether an object's properties reference the id anywhere; see
+ * Whether an object's properties reference the id anywhere. See
  * {@link valueReferences} for the shapes considered.
  */
 function objectReferences(properties: PbxprojObject, id: string): boolean {
@@ -770,10 +771,10 @@ function objectReferences(properties: PbxprojObject, id: string): boolean {
 }
 
 /**
- * Strips every reference to the id inside a value and returns the value to
- * keep: strings equal to the id become `undefined`, arrays drop matching
- * items at any depth, and dictionaries drop entries keyed by it and
- * recurse into their values.
+ * Strips every reference to the id inside a value and returns the value
+ * to keep. Strings equal to the id become `undefined`, arrays drop
+ * matching items at any depth, and dictionaries drop entries keyed by it
+ * and recurse into their values.
  */
 function stripValue(value: PbxprojValue, id: string): PbxprojValue | undefined {
   if (typeof value === "string") {

@@ -93,9 +93,9 @@ function parseArgs(argv: string[]): Options {
 }
 
 /**
- * Directories the walk never descends into: dependency stores, build
- * output, caches, and version control. Pruning them keeps the sweep fast on
- * large checkouts without hiding any project sources.
+ * Directories the walk never descends into. They hold dependency stores,
+ * build output, caches, and version control, so pruning them keeps the
+ * sweep fast on large checkouts without hiding any project sources.
  */
 const PRUNED_DIRECTORIES = new Set([
   ".build",
@@ -240,7 +240,7 @@ for (const path of paths) {
 // Model exercise, for each parsed project:
 //
 // 1. Run validate(). Issues are statistics, not failures.
-// 2. If an app target exists: add a probe extension, then remove it.
+// 2. If an app target exists, add a probe extension, then remove it.
 //    The document must stay byte-stable after each step.
 //
 // Findings are only unexpected errors and instability.
@@ -304,8 +304,9 @@ for (const file of parsed) {
   }
 }
 
-// Differential sample: every k-th parsed file, spreading the sample across
-// the corpus instead of front-loading whatever the walk found first.
+// The differential sample takes every k-th parsed file, spreading it
+// across the corpus instead of front-loading whatever the walk found
+// first.
 const step = Math.max(1, Math.floor(parsed.length / options.sample));
 const differentialSample = parsed.filter((_, index) => index % step === 0).slice(0, options.sample);
 

@@ -55,8 +55,9 @@ export const ProductType = {
 } as const;
 
 /**
- * How a product type's build product appears on disk: the wrapper file
- * extension and the `explicitFileType` of its product file reference.
+ * How a product type's build product appears on disk. Each entry carries
+ * the wrapper file extension and the `explicitFileType` of the product
+ * file reference.
  */
 export const PRODUCT_FILE_INFO: Readonly<Record<string, { extension: string; fileType: string }>> = {
   [ProductType.application]: { extension: ".app", fileType: "wrapper.application" },
