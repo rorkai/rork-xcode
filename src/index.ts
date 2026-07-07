@@ -27,6 +27,7 @@ export {
 export {
   CopyFilesDestination,
   Isa,
+  parseApplePlatform,
   ProductType,
   type ApplePlatform,
   type BuildPhaseIsa,

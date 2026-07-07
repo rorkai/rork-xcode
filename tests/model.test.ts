@@ -21,6 +21,7 @@ import {
   Isa,
   LegacyTarget,
   NativeTarget,
+  parseApplePlatform,
   ProductType,
   ReferenceProxy,
   RemoteSwiftPackageReference,
@@ -783,6 +784,29 @@ describe("aggregate targets, legacy targets, and exotic references", () => {
     expect(proxy.path).toBe("libOther.a");
     expect(proxy.remoteReference()?.id).toBe(remote.id);
     expect(project.validate()).toEqual([]);
+  });
+});
+
+describe("parseApplePlatform", () => {
+  it("normalizes casing, separators, and SDK names to platforms", () => {
+    expect(parseApplePlatform("ios")).toBe("ios");
+    expect(parseApplePlatform("tvOS")).toBe("tvos");
+    expect(parseApplePlatform("TV_OS")).toBe("tvos");
+    expect(parseApplePlatform("VISION_OS")).toBe("visionos");
+    expect(parseApplePlatform("appletvos")).toBe("tvos");
+    expect(parseApplePlatform("appletvsimulator")).toBe("tvos");
+    expect(parseApplePlatform("iphoneos")).toBe("ios");
+    expect(parseApplePlatform("xros")).toBe("visionos");
+    expect(parseApplePlatform("MACOSX")).toBe("macos");
+    expect(parseApplePlatform("watchOS")).toBe("watchos");
+    expect(parseApplePlatform("android")).toBeUndefined();
+    expect(parseApplePlatform("")).toBeUndefined();
+  });
+
+  it("feeds main-app-target lookups directly", () => {
+    const project = openApp();
+    const platform = parseApplePlatform("IOS") ?? "ios";
+    expect(project.findMainAppTarget(platform)?.name).toBe("SampleApp");
   });
 });
 

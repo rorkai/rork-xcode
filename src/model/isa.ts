@@ -102,6 +102,40 @@ export const PRODUCT_FILE_INFO: Readonly<Record<string, { extension: string; fil
 export type ApplePlatform = "ios" | "macos" | "tvos" | "watchos" | "visionos";
 
 /**
+ * Normalizes a platform name to an {@link ApplePlatform}. Punctuation and
+ * casing are ignored, so spellings like `tvOS`, `TV_OS`, and `visionos`
+ * all resolve, and the SDK names Xcode writes into `SDKROOT` (for
+ * example `iphoneos`, `appletvos`, and `xros`, with their simulator
+ * variants) resolve to the platform they build for. Anything else
+ * returns `undefined`.
+ */
+export function parseApplePlatform(value: string): ApplePlatform | undefined {
+  switch (value.toLowerCase().replaceAll(/[^a-z]/gu, "")) {
+    case "ios":
+    case "iphoneos":
+    case "iphonesimulator":
+      return "ios";
+    case "macos":
+    case "macosx":
+    case "osx":
+      return "macos";
+    case "tvos":
+    case "appletvos":
+    case "appletvsimulator":
+      return "tvos";
+    case "watchos":
+    case "watchsimulator":
+      return "watchos";
+    case "visionos":
+    case "xros":
+    case "xrsimulator":
+      return "visionos";
+    default:
+      return undefined;
+  }
+}
+
+/**
  * The build-setting key that carries each platform's deployment target.
  * A target (or its project) sets exactly one of these per platform it
  * builds for, which is what makes them usable as a platform signal.
