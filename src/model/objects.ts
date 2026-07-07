@@ -45,7 +45,7 @@ import type { NativeTarget } from "./target";
  * specific property shape.
  */
 export class Group<Properties extends GroupProperties = GroupProperties> extends XcodeObject<Properties> {
-  static readonly isa: string | null = Isa.group;
+  static readonly isa = Isa.group;
   /**
    * Ids of the group's children, in navigator order. Non-string entries of
    * a malformed document are skipped.
@@ -141,7 +141,7 @@ export class Group<Properties extends GroupProperties = GroupProperties> extends
  * per language. Everything else behaves like a plain group.
  */
 export class VariantGroup extends Group {
-  static readonly isa: string | null = Isa.variantGroup;
+  static readonly isa = Isa.variantGroup;
 }
 
 /**
@@ -242,7 +242,7 @@ export class BuildPhase<
  * A `PBXSourcesBuildPhase` compiles the target's source files.
  */
 export class SourcesBuildPhase extends BuildPhase {
-  static readonly isa: string | null = Isa.sourcesBuildPhase;
+  static readonly isa = Isa.sourcesBuildPhase;
 }
 
 /**
@@ -250,7 +250,7 @@ export class SourcesBuildPhase extends BuildPhase {
  * libraries, and Swift package products.
  */
 export class FrameworksBuildPhase extends BuildPhase {
-  static readonly isa: string | null = Isa.frameworksBuildPhase;
+  static readonly isa = Isa.frameworksBuildPhase;
 }
 
 /**
@@ -258,7 +258,7 @@ export class FrameworksBuildPhase extends BuildPhase {
  * built product.
  */
 export class ResourcesBuildPhase extends BuildPhase {
-  static readonly isa: string | null = Isa.resourcesBuildPhase;
+  static readonly isa = Isa.resourcesBuildPhase;
 }
 
 /**
@@ -266,7 +266,7 @@ export class ResourcesBuildPhase extends BuildPhase {
  * their public, private, or project visibility.
  */
 export class HeadersBuildPhase extends BuildPhase {
-  static readonly isa: string | null = Isa.headersBuildPhase;
+  static readonly isa = Isa.headersBuildPhase;
 }
 
 /**
@@ -274,7 +274,7 @@ export class HeadersBuildPhase extends BuildPhase {
  * inside the built product, which is how extensions and watch apps embed.
  */
 export class CopyFilesBuildPhase extends BuildPhase<CopyFilesBuildPhaseProperties> {
-  static readonly isa: string | null = Isa.copyFilesBuildPhase;
+  static readonly isa = Isa.copyFilesBuildPhase;
 
   /**
    * The destination path inside the folder `dstSubfolderSpec` selects,
@@ -289,7 +289,7 @@ export class CopyFilesBuildPhase extends BuildPhase<CopyFilesBuildPhasePropertie
  * A `PBXShellScriptBuildPhase` runs a script during the build.
  */
 export class ShellScriptBuildPhase extends BuildPhase<ShellScriptBuildPhaseProperties> {
-  static readonly isa: string | null = Isa.shellScriptBuildPhase;
+  static readonly isa = Isa.shellScriptBuildPhase;
 
   /**
    * The script's source text, when present.
@@ -314,7 +314,7 @@ export class ShellScriptBuildPhase extends BuildPhase<ShellScriptBuildPhasePrope
  * carry them.
  */
 export class RezBuildPhase extends BuildPhase {
-  static readonly isa: string | null = Isa.rezBuildPhase;
+  static readonly isa = Isa.rezBuildPhase;
 }
 
 /**
@@ -322,7 +322,7 @@ export class RezBuildPhase extends BuildPhase {
  * Xcode no longer creates these, but old documents still carry them.
  */
 export class AppleScriptBuildPhase extends BuildPhase {
-  static readonly isa: string | null = Isa.appleScriptBuildPhase;
+  static readonly isa = Isa.appleScriptBuildPhase;
 }
 
 /**
@@ -330,7 +330,7 @@ export class AppleScriptBuildPhase extends BuildPhase {
  * one build phase, optionally with per-file settings.
  */
 export class BuildFile extends XcodeObject<BuildFileProperties> {
-  static readonly isa: string | null = Isa.buildFile;
+  static readonly isa = Isa.buildFile;
 
   /**
    * The view of the file reference the build file points at, when it
@@ -356,7 +356,7 @@ export class BuildFile extends XcodeObject<BuildFileProperties> {
  * members are synchronized from disk instead of listed individually.
  */
 export class SyncRootGroup extends XcodeObject<SyncRootGroupProperties> {
-  static readonly isa: string | null = Isa.fileSystemSynchronizedRootGroup;
+  static readonly isa = Isa.fileSystemSynchronizedRootGroup;
 
   /**
    * The group's on-disk folder path, when present.
@@ -440,7 +440,7 @@ export class ExceptionSet<
  * a synchronized folder's automatic target membership.
  */
 export class BuildFileExceptionSet extends ExceptionSet {
-  static readonly isa: string | null = Isa.fileSystemSynchronizedBuildFileExceptionSet;
+  static readonly isa = Isa.fileSystemSynchronizedBuildFileExceptionSet;
 }
 
 /**
@@ -449,7 +449,7 @@ export class BuildFileExceptionSet extends ExceptionSet {
  * phase than the automatic one.
  */
 export class BuildPhaseMembershipExceptionSet extends ExceptionSet<BuildPhaseMembershipExceptionSetProperties> {
-  static readonly isa: string | null = Isa.fileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
+  static readonly isa = Isa.fileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
 
   /**
    * The view of the build phase the listed files belong to, when the
@@ -466,7 +466,7 @@ export class BuildPhaseMembershipExceptionSet extends ExceptionSet<BuildPhaseMem
  * kind of file.
  */
 export class BuildRule extends XcodeObject<BuildRuleProperties> {
-  static readonly isa: string | null = Isa.buildRule;
+  static readonly isa = Isa.buildRule;
   /**
    * The rule's script, when it is a script rule rather than a reference
    * to a compiler specification.
@@ -482,7 +482,7 @@ export class BuildRule extends XcodeObject<BuildRuleProperties> {
  * `currentVersion` names the active one.
  */
 export class VersionGroup extends Group<VersionGroupProperties> {
-  static readonly isa: string | null = Isa.versionGroup;
+  static readonly isa = Isa.versionGroup;
 
   /**
    * The view of the active model version's file reference, when the group
@@ -508,7 +508,7 @@ export class VersionGroup extends Group<VersionGroupProperties> {
  * target or of the project, for example Debug or Release.
  */
 export class BuildConfiguration extends XcodeObject<BuildConfigurationProperties> {
-  static readonly isa: string | null = Isa.buildConfiguration;
+  static readonly isa = Isa.buildConfiguration;
 
   /**
    * The configuration's name, when present.
@@ -534,7 +534,7 @@ export class BuildConfiguration extends XcodeObject<BuildConfigurationProperties
  * but old documents still carry them.
  */
 export class BuildStyle extends XcodeObject<BuildStyleProperties> {
-  static readonly isa: string | null = Isa.buildStyle;
+  static readonly isa = Isa.buildStyle;
 
   /**
    * The style's name, when present.
@@ -558,7 +558,7 @@ export class BuildStyle extends XcodeObject<BuildStyleProperties> {
  * built products themselves.
  */
 export class FileReference extends XcodeObject<FileReferenceProperties> {
-  static readonly isa: string | null = Isa.fileReference;
+  static readonly isa = Isa.fileReference;
 
   /**
    * The reference's path, relative to its `sourceTree`, when present.
@@ -581,7 +581,7 @@ export class FileReference extends XcodeObject<FileReferenceProperties> {
  * target dependency and the target it points at.
  */
 export class ContainerItemProxy extends XcodeObject<ContainerItemProxyProperties> {
-  static readonly isa: string | null = Isa.containerItemProxy;
+  static readonly isa = Isa.containerItemProxy;
 
   /**
    * The display name of the object the proxy points at, when present.
@@ -597,7 +597,7 @@ export class ContainerItemProxy extends XcodeObject<ContainerItemProxyProperties
  * another, through a container item proxy naming the prerequisite.
  */
 export class TargetDependency extends XcodeObject<TargetDependencyProperties> {
-  static readonly isa: string | null = Isa.targetDependency;
+  static readonly isa = Isa.targetDependency;
 
   /**
    * The view of the target this dependency points at, when the reference
@@ -622,7 +622,7 @@ export class TargetDependency extends XcodeObject<TargetDependencyProperties> {
  * target or of the project, plus the default configuration choice.
  */
 export class ConfigurationList extends XcodeObject<ConfigurationListProperties> {
-  static readonly isa: string | null = Isa.configurationList;
+  static readonly isa = Isa.configurationList;
 
   /**
    * The name of the configuration builds use when none is specified, when
@@ -661,7 +661,7 @@ export class SwiftPackageReference<
  * version requirement.
  */
 export class RemoteSwiftPackageReference extends SwiftPackageReference<RemoteSwiftPackageReferenceProperties> {
-  static readonly isa: string | null = Isa.remoteSwiftPackageReference;
+  static readonly isa = Isa.remoteSwiftPackageReference;
 
   /**
    * The package's repository URL, when present.
@@ -676,7 +676,7 @@ export class RemoteSwiftPackageReference extends SwiftPackageReference<RemoteSwi
  * to the project.
  */
 export class LocalSwiftPackageReference extends SwiftPackageReference<LocalSwiftPackageReferenceProperties> {
-  static readonly isa: string | null = Isa.localSwiftPackageReference;
+  static readonly isa = Isa.localSwiftPackageReference;
 
   /**
    * The package's path relative to the project, when present.
@@ -691,7 +691,7 @@ export class LocalSwiftPackageReference extends SwiftPackageReference<LocalSwift
  * package to the target that consumes it.
  */
 export class SwiftPackageProductDependency extends XcodeObject<SwiftPackageProductDependencyProperties> {
-  static readonly isa: string | null = Isa.swiftPackageProductDependency;
+  static readonly isa = Isa.swiftPackageProductDependency;
 
   /**
    * The product's name as the package manifest declares it, when present.
@@ -715,7 +715,7 @@ export class SwiftPackageProductDependency extends XcodeObject<SwiftPackageProdu
  * another project referenced from this one.
  */
 export class ReferenceProxy extends XcodeObject<ReferenceProxyProperties> {
-  static readonly isa: string | null = Isa.referenceProxy;
+  static readonly isa = Isa.referenceProxy;
 
   /**
    * The proxy's product path inside the other project's build directory,

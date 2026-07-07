@@ -148,20 +148,21 @@ export class Target<Properties extends TargetProperties = TargetProperties> exte
   /**
    * Finds the target's first build phase with the given isa, and, when
    * `name` is provided, the given display name. An isa literal of the
-   * vocabulary types the result: `findBuildPhase(Isa.copyFilesBuildPhase)`
+   * vocabulary types the result, so `findBuildPhase(Isa.copyFilesBuildPhase)`
    * gives a `CopyFilesBuildPhase | undefined`.
    */
   findBuildPhase<I extends string>(isa: I, name?: string): BuildPhaseOf<I> | undefined {
     const found = this.buildPhases().find((phase) => phase.isa === isa && (name == null || phase.name === name));
-    // Phases come off the view factory keyed by this same isa, which is
-    // what BuildPhaseOf describes; the compiler cannot see that link.
+    // The cast holds because the view factory created each phase from the
+    // same isa the find just matched, and BuildPhaseOf names the class the
+    // factory picks for it. The compiler alone cannot make that connection.
     return found as BuildPhaseOf<I> | undefined;
   }
 
   /**
    * Returns the target's build phase with the given isa and properties,
    * creating and appending it when missing. The properties apply only on
-   * creation; an existing phase is returned as is, already typed as the
+   * creation. An existing phase is returned as is, already typed as the
    * phase class the isa names.
    *
    * The match key is the isa plus the `name` property when one is given,
@@ -186,9 +187,9 @@ export class Target<Properties extends TargetProperties = TargetProperties> exte
       `${isa} ${this.id} ${name ?? ""}`,
     );
     ensureArray(this.properties, "buildPhases").push(phase.id);
-    // While the isa stays generic the compiler keeps ViewOf and
-    // BuildPhaseOf unresolved and cannot equate them; both describe the
-    // view the factory creates for it.
+    // ViewOf and BuildPhaseOf agree on every phase isa, but while the isa
+    // stays generic the compiler keeps both conditionals unresolved and
+    // cannot equate them.
     return phase as BuildPhaseOf<I>;
   }
 
@@ -255,7 +256,7 @@ export class Target<Properties extends TargetProperties = TargetProperties> exte
  * itself, such as an application or an app extension.
  */
 export class NativeTarget extends Target<NativeTargetProperties> {
-  static readonly isa: string | null = Isa.nativeTarget;
+  static readonly isa = Isa.nativeTarget;
 
   /**
    * The target's product type identifier, for example
@@ -497,7 +498,7 @@ export class NativeTarget extends Target<NativeTargetProperties> {
  * phases, and the shared target surface covers everything it carries.
  */
 export class AggregateTarget extends Target {
-  static readonly isa: string | null = Isa.aggregateTarget;
+  static readonly isa = Isa.aggregateTarget;
 }
 
 /**
@@ -505,7 +506,7 @@ export class AggregateTarget extends Target {
  * instead of using Xcode's build system.
  */
 export class LegacyTarget extends Target<LegacyTargetProperties> {
-  static readonly isa: string | null = Isa.legacyTarget;
+  static readonly isa = Isa.legacyTarget;
   /**
    * The build tool the target invokes, as an absolute path.
    */
