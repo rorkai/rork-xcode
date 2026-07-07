@@ -138,7 +138,10 @@ class Parser {
     this.pos++;
     const name = this.parseName("element name");
 
-    const attributes: Record<string, string> = {};
+    // Null-prototype storage keeps attribute names off the Object
+    // prototype: `toString` is not a false duplicate, and `__proto__`
+    // stores as a plain own property instead of mutating the prototype.
+    const attributes: Record<string, string> = Object.create(null) as Record<string, string>;
     for (;;) {
       const hadWhitespace = this.skipWhitespace();
       const code = this.input.charCodeAt(this.pos);
@@ -298,7 +301,9 @@ class Parser {
       return String.fromCodePoint(codePoint);
     }
 
-    const named = NAMED_ENTITIES[body];
+    // An own-key check keeps prototype members like `constructor` from
+    // resolving as entities.
+    const named = Object.hasOwn(NAMED_ENTITIES, body) ? NAMED_ENTITIES[body] : undefined;
     if (named == null) {
       this.failAt(`Unknown entity &${body};`, start);
     }

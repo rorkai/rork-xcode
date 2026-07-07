@@ -96,13 +96,25 @@ describe("parse failures", () => {
       parseXcscheme(text);
     } catch (error) {
       assert(error instanceof XcschemeParseError);
-      expect(error.message).toMatch(/line \d+, column \d+/);
+      expect(error.message).toMatch(/line \d+, column \d+/u);
     }
   });
 
   it("reads character references and a leading byte order mark", () => {
     const document = parseXcscheme('\uFEFF<Scheme note = "a&#10;b&#x41;"></Scheme>');
     expect(document.root.attributes["note"]).toBe("a\nbA");
+  });
+
+  it("does not resolve entities or attributes through the Object prototype", () => {
+    // `constructor` exists on Object.prototype; as an entity it must still
+    // be unknown, and as an attribute name it must not read as duplicate.
+    expect(() => parseXcscheme('<Scheme a = "&constructor;"></Scheme>')).toThrow(/Unknown entity/u);
+
+    const document = parseXcscheme('<Scheme toString = "a" __proto__ = "b"></Scheme>');
+    expect(document.root.attributes["toString"]).toBe("a");
+    expect(document.root.attributes["__proto__"]).toBe("b");
+    expect(Object.getPrototypeOf(document.root.attributes)).toBeNull();
+    expect(buildXcscheme(document)).toContain('toString = "a"');
   });
 });
 
