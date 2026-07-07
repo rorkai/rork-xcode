@@ -15,7 +15,7 @@
     // export counterpart, so sort-exports orders whole export statements.
     "perfectionist/sort-named-imports": ["error", { "groups": ["value-import", "type-import"] }],
     "perfectionist/sort-named-exports": ["error", { "groups": ["value-export", "type-export"] }],
-    "perfectionist/sort-exports": "error",
+    "perfectionist/sort-exports": ["error", { "groups": ["value-export", "type-export"] }],
     "no-console": "error",
     "typescript/consistent-type-imports": "error",
     // The scanner intentionally operates on UTF-16 code units: unit-wise

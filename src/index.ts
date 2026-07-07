@@ -17,11 +17,15 @@
 
 export { buildPbxproj } from "./build";
 export { PbxprojBuildError, PbxprojParseError, XcodeModelError, type PbxprojErrorPosition } from "./errors";
-export type { ProjectIssue, ProjectIssueKind } from "./model/doctor";
 export { CopyFilesDestination, Isa, ProductType, type ApplePlatform } from "./model/isa";
 export { XcodeObject } from "./model/object";
 export { BuildPhase, Group, SyncRootGroup } from "./model/objects";
 export { RootProject, XcodeProject, type AddNativeTargetOptions } from "./model/project";
+export { NativeTarget } from "./model/target";
+export { parsePbxproj } from "./parse";
+export { generateObjectId } from "./uuid";
+
+export type { ProjectIssue, ProjectIssueKind } from "./model/doctor";
 export type {
   BuildConfigurationProperties,
   BuildFileProperties,
@@ -39,7 +43,4 @@ export type {
   SyncRootGroupProperties,
   TargetDependencyProperties,
 } from "./model/properties";
-export { NativeTarget } from "./model/target";
-export { parsePbxproj } from "./parse";
 export type { PbxprojArray, PbxprojObject, PbxprojValue } from "./types";
-export { generateObjectId } from "./uuid";
