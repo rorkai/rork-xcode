@@ -1,7 +1,7 @@
 {
   "name": "rork-xcode",
   "version": "0.2.0",
-  "description": "Zero-dependency Xcode project (pbxproj) parser and builder that runs identically in every JavaScript runtime",
+  "description": "Zero-dependency Xcode project (pbxproj) and scheme (xcscheme) parser, builder, and object model that runs identically in every JavaScript runtime",
   "keywords": [
     "apple",
     "builder",

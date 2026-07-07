@@ -3,7 +3,7 @@
 [![CI](https://github.com/rorkai/rork-xcode/actions/workflows/ci.yml/badge.svg)](https://github.com/rorkai/rork-xcode/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/rork-xcode)](https://www.npmjs.com/package/rork-xcode)
 
-The [fastest](#performance) zero-dependency Xcode project (`project.pbxproj`) parser, builder, and object model for any JavaScript runtime: browsers, Node.js, Bun, Electron, Cloudflare Workers, and React Native.
+The [fastest](#performance) zero-dependency Xcode project (`project.pbxproj`) parser, builder, and object model for any JavaScript runtime: browsers, Node.js, Bun, Electron, Cloudflare Workers, and React Native. [Scheme files](#schemes) (`.xcscheme`) are covered with the same round-trip guarantees.
 
 ```ts
 import { parsePbxproj, buildPbxproj } from "rork-xcode";
@@ -229,6 +229,39 @@ for (const [id, object] of project.objects()) {
 - **Soft reads, loud writes.** Real-world projects can be malformed, so lookups return `undefined` where a document could omit something. Operations that cannot proceed without structure (no root project object, an unknown product type, a view whose object was deleted) throw `XcodeModelError`.
 - **Identity-mapped views.** Two lookups of the same id return the same instance, so views compare with `===`.
 
+## Schemes
+
+`.xcscheme` files describe how Xcode builds, runs, tests, and archives a target. They are not property lists but a small XML dialect of their own, and `parseXcscheme` and `buildXcscheme` cover it with the same contract as the pbxproj functions: an Xcode-written scheme rebuilds byte for byte, any other input reaches Xcode's canonical layout in one build, and malformed input fails with a typed error carrying line and column.
+
+```ts
+import { buildXcscheme, parseXcscheme, xcschemeElements } from "rork-xcode";
+
+const scheme = parseXcscheme(xcschemeText);
+
+// The tree is plain data: elements with ordered attributes and children.
+for (const reference of xcschemeElements(scheme.root, "BuildableReference")) {
+  reference.attributes["BlueprintName"] = "RenamedApp";
+  reference.attributes["BuildableName"] = "RenamedApp.app";
+  reference.attributes["ReferencedContainer"] = "container:RenamedApp.xcodeproj";
+}
+
+const text = buildXcscheme(scheme);
+```
+
+`createXcscheme` produces the scheme Xcode's own "New Scheme" action writes for an application target, wired to the target's object id from the project document:
+
+```ts
+import { createXcscheme } from "rork-xcode";
+
+const scheme = createXcscheme({
+  appName: "DemoApp",
+  blueprintIdentifier: app.id,
+});
+const text = buildXcscheme(scheme);
+```
+
+Attribute order is preserved and meaningful: the writer emits attributes in insertion order, which is how byte-identical round-trips fall out. Comments are kept, attribute values resolve the character references Xcode writes (`&quot;`, `&amp;`, `&#10;` and friends), and the writer re-escapes them identically.
+
 ## Performance
 
 `rork-xcode` is measured against the pbxproj parsers on npm, [`@bacons/xcode`](https://www.npmjs.com/package/@bacons/xcode) (its `/json` parse/build entry point) and [`xcode`](https://www.npmjs.com/package/xcode) (the long-standing package used by native build tooling), on three documents: two real Xcode-written projects from the test suite and a deterministically generated five-target app with 800 source files. It is the fastest at both operations on every document, with zero dependencies.
@@ -260,7 +293,7 @@ Measured on an Apple M5 Max, Node.js 24, single thread, with `@bacons/xcode` 1.0
 - The committed fixture corpus spans project generations from Xcode 3 to Xcode 16, captured from real projects with identifiers neutralized: synchronized folders with both exception-set kinds, classic groups, variant groups, aggregate and legacy targets, reference proxies, build rules, Swift packages, and a ~100 KiB multiplatform framework project.
 - Documents already in current Xcode's layout must round-trip byte for byte; documents from other tool generations must normalize to a byte-stable fixed point with unchanged values.
 - On macOS, the suite cross-validates every fixture and its rebuilt form with `plutil`, Apple's own property list parser and the empirical ground truth for what Apple tooling accepts.
-- A corpus sweep (`pnpm corpus`) walks every Xcode project on the machine, verifies each one parses and reaches a byte-stable fixed point, exercises the object model against it, and cross-validates a sample against plutil's own reading.
+- A corpus sweep (`pnpm corpus`) walks every Xcode project and scheme on the machine, verifies each one parses and reaches a byte-stable fixed point, exercises the object model against every project, and cross-validates a sample against plutil's own reading.
 - CI runs the full gate on Linux and macOS, and executes the built artifact on the oldest supported Node to enforce the `engines` floor.
 
 ## Releasing
