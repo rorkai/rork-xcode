@@ -34,7 +34,9 @@ import { parsePlist, type PlistValue } from "rork-plist";
 
 import {
   buildPbxproj,
+  buildXcscheme,
   parsePbxproj,
+  parseXcscheme,
   PbxprojParseError,
   ProductType,
   XcodeModelError,
@@ -115,7 +117,7 @@ const PRUNED_DIRECTORIES = new Set([
  * build directories and skipping unreadable entries. Sibling directories
  * walk concurrently, which matters on wide checkouts.
  */
-async function collectProjects(root: string, paths: string[], limit: number): Promise<void> {
+async function collectProjects(root: string, paths: string[], schemePaths: string[], limit: number): Promise<void> {
   if (paths.length >= limit) {
     return;
   }
@@ -136,9 +138,11 @@ async function collectProjects(root: string, paths: string[], limit: number): Pr
       }
     } else if (entry.isFile() && entry.name === "project.pbxproj") {
       paths.push(join(root, entry.name));
+    } else if (entry.isFile() && entry.name.endsWith(".xcscheme") && schemePaths.length < limit) {
+      schemePaths.push(join(root, entry.name));
     }
   }
-  await Promise.all(subdirectories.map((path) => collectProjects(path, paths, limit)));
+  await Promise.all(subdirectories.map((path) => collectProjects(path, paths, schemePaths, limit)));
 }
 
 /** How a swept file fared, from strongest fidelity to failure. */
@@ -190,12 +194,15 @@ async function plutilAccepts(path: string): Promise<boolean> {
 
 const options = parseArgs(process.argv.slice(2));
 
-console.log(`collecting project.pbxproj files under ${options.roots.join(", ")} (max ${options.maxFiles})`);
+console.log(
+  `collecting project.pbxproj and .xcscheme files under ${options.roots.join(", ")} (max ${options.maxFiles})`,
+);
 const paths: string[] = [];
+const schemePaths: string[] = [];
 for (const root of options.roots) {
-  await collectProjects(root, paths, options.maxFiles);
+  await collectProjects(root, paths, schemePaths, options.maxFiles);
 }
-console.log(`found ${paths.length} files\n`);
+console.log(`found ${paths.length} projects and ${schemePaths.length} schemes\n`);
 
 const counts = new Map<Outcome, number>();
 const parsed: ParsedFile[] = [];
@@ -356,8 +363,43 @@ if (process.platform === "darwin") {
   }
 }
 
+// Scheme sweep. Every readable .xcscheme must parse and reach a
+// byte-stable fixed point; Xcode-written files are expected byte-exact.
+const schemeCounts = new Map<string, number>();
+for (const path of schemePaths) {
+  let text: string;
+  try {
+    text = await readFile(path, "utf-8");
+  } catch {
+    continue; // unreadable file, nothing to audit
+  }
+  if (text.length === 0) {
+    continue;
+  }
+
+  try {
+    const built = buildXcscheme(parseXcscheme(text));
+    if (built === text) {
+      schemeCounts.set("byte-exact", (schemeCounts.get("byte-exact") ?? 0) + 1);
+    } else if (buildXcscheme(parseXcscheme(built)) === built) {
+      schemeCounts.set("canonicalized", (schemeCounts.get("canonicalized") ?? 0) + 1);
+    } else {
+      schemeCounts.set("unstable", (schemeCounts.get("unstable") ?? 0) + 1);
+      findings.push(`${path}: scheme round-trip is not a fixed point`);
+    }
+  } catch (error) {
+    schemeCounts.set("parse-failure", (schemeCounts.get("parse-failure") ?? 0) + 1);
+    findings.push(`${path}: scheme failed to parse, ${String(error)}`);
+  }
+}
+
 console.log("\n=== fidelity ===");
 for (const [outcome, count] of [...counts.entries()].toSorted((a, b) => b[1] - a[1])) {
+  console.log(`  ${outcome.padEnd(20)} ${String(count).padStart(6)}`);
+}
+
+console.log("\n=== schemes ===");
+for (const [outcome, count] of [...schemeCounts.entries()].toSorted((a, b) => b[1] - a[1])) {
   console.log(`  ${outcome.padEnd(20)} ${String(count).padStart(6)}`);
 }
 
@@ -379,5 +421,5 @@ if (findings.length > 0) {
   process.exit(1);
 }
 console.log(
-  "\nno findings: every readable project parses, round-trips stably, agrees with plutil, and survives model edits",
+  "\nno findings: every readable project and scheme parses, round-trips stably, agrees with plutil, and survives model edits",
 );

@@ -16,13 +16,24 @@
  */
 
 export { buildPbxproj } from "./build";
-export { PbxprojBuildError, PbxprojParseError, XcodeModelError, type PbxprojErrorPosition } from "./errors";
+export {
+  PbxprojBuildError,
+  PbxprojParseError,
+  XcodeModelError,
+  XcschemeBuildError,
+  XcschemeParseError,
+  type PbxprojErrorPosition,
+} from "./errors";
 export { CopyFilesDestination, Isa, ProductType, type ApplePlatform } from "./model/isa";
 export { XcodeObject } from "./model/object";
 export { BuildPhase, BuildRule, Group, ReferenceProxy, SyncRootGroup, VersionGroup } from "./model/objects";
 export { RootProject, XcodeProject, type AddNativeTargetOptions } from "./model/project";
 export { AggregateTarget, LegacyTarget, NativeTarget, Target } from "./model/target";
 export { parsePbxproj } from "./parse";
+export { buildXcscheme } from "./scheme/build";
+export { createXcscheme, xcschemeElements, type CreateXcschemeOptions } from "./scheme/model";
+export { parseXcscheme } from "./scheme/parse";
+export { isXcschemeElement } from "./scheme/types";
 export { generateObjectId } from "./uuid";
 
 export type { ProjectIssue, ProjectIssueKind } from "./model/doctor";
@@ -48,4 +59,5 @@ export type {
   TargetProperties,
   VersionGroupProperties,
 } from "./model/properties";
+export type { XcschemeComment, XcschemeDocument, XcschemeElement, XcschemeNode } from "./scheme/types";
 export type { PbxprojArray, PbxprojObject, PbxprojValue } from "./types";

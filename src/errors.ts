@@ -74,6 +74,55 @@ export class PbxprojParseError extends Error {
 }
 
 /**
+ * Thrown when the source text is not a well-formed scheme document (the
+ * XML dialect of `.xcscheme` files).
+ *
+ * The message always embeds the line and column of the failure, and the
+ * same information is available in structured form on {@link position}
+ * for programmatic use.
+ */
+export class XcschemeParseError extends Error {
+  /** Where in the source text parsing failed. */
+  readonly position: PbxprojErrorPosition;
+
+  /**
+   * @param message Failure description without location; the location is
+   *   appended automatically.
+   * @param source Full source text, used to compute the position.
+   * @param offset Character offset of the failure inside `source`.
+   */
+  constructor(message: string, source: string, offset: number) {
+    const position = positionAt(source, offset);
+    super(`${message} (line ${position.line}, column ${position.column})`);
+    this.name = "XcschemeParseError";
+    this.position = position;
+  }
+}
+
+/**
+ * Thrown when a scheme element cannot be written as XML.
+ *
+ * Raised for element and attribute names that are not valid XML names and
+ * for attribute values carrying control characters XML 1.0 cannot encode.
+ * The {@link path} pinpoints the offending element inside the tree.
+ */
+export class XcschemeBuildError extends Error {
+  /** Path to the offending element from the root, e.g. `Scheme.BuildAction[0]`. */
+  readonly path: string;
+
+  /**
+   * @param message Failure description without location; the element path
+   *   is appended automatically.
+   * @param path Path to the offending element from the root.
+   */
+  constructor(message: string, path: string) {
+    super(`${message} (at ${path})`);
+    this.name = "XcschemeBuildError";
+    this.path = path;
+  }
+}
+
+/**
  * Thrown by the object model when an operation cannot proceed: the
  * document lacks the structure the operation needs (no objects dictionary,
  * no root project object), a view's object was removed from the document,
