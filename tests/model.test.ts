@@ -34,6 +34,7 @@ import {
   XcodeProject,
   type PbxprojObject,
   type SyncRootGroup,
+  type ViewByIsa,
   type XcodeObject,
 } from "../src/index";
 
@@ -772,6 +773,33 @@ describe("typed views and narrowing", () => {
       // listed isa must map to a view class declaring exactly that isa.
       expect((view.constructor as typeof XcodeObject).isa, isa).toBe(isa);
     }
+    // The ViewByIsa type map must mirror the Isa vocabulary exactly, or
+    // typed creation helpers would fall back to base classes silently.
+    expectTypeOf<keyof ViewByIsa>().toEqualTypeOf<(typeof Isa)[keyof typeof Isa]>();
+  });
+
+  it("types creation and lookup returns by the isa literal", () => {
+    const project = openApp();
+    const app = project.findMainAppTarget("ios");
+    assert(app);
+
+    const reference = project.add(Isa.fileReference, { path: "Extra.swift", sourceTree: "<group>" });
+    expectTypeOf(reference).toEqualTypeOf<FileReference>();
+    expect(reference).toBeInstanceOf(FileReference);
+
+    const embedPhase = app.ensureBuildPhase(Isa.copyFilesBuildPhase, { name: "Embed Extras" });
+    expectTypeOf(embedPhase).toEqualTypeOf<CopyFilesBuildPhase>();
+    expect(embedPhase).toBeInstanceOf(CopyFilesBuildPhase);
+    expect(embedPhase.dstPath).toBeUndefined();
+
+    const found = app.findBuildPhase(Isa.copyFilesBuildPhase, "Embed Extras");
+    expectTypeOf(found).toEqualTypeOf<CopyFilesBuildPhase | undefined>();
+    expect(found).toBe(embedPhase);
+
+    // A non-literal isa falls back to the generic types.
+    const dynamicIsa: string = Isa.sourcesBuildPhase;
+    expectTypeOf(project.add(dynamicIsa, {})).toEqualTypeOf<XcodeObject>();
+    expectTypeOf(app.findBuildPhase(dynamicIsa)).toEqualTypeOf<BuildPhase | undefined>();
   });
 
   it("resolves typed relationships across the graph", () => {

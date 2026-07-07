@@ -32,7 +32,9 @@ import { configurationsOf, defaultConfigurationSettingsOf } from "./settings";
 import { asString, ensureArray, stringItems } from "./values";
 
 import type { PbxprojObject } from "../types";
+import type { BuildPhaseIsa } from "./isa";
 import type { BuildConfiguration } from "./objects";
+import type { BuildPhaseOf } from "./project";
 import type { LegacyTargetProperties, NativeTargetProperties, TargetProperties } from "./properties";
 
 /**
@@ -145,21 +147,28 @@ export class Target<Properties extends TargetProperties = TargetProperties> exte
 
   /**
    * Finds the target's first build phase with the given isa, and, when
-   * `name` is provided, the given display name.
+   * `name` is provided, the given display name. An isa literal of the
+   * vocabulary types the result, so `findBuildPhase(Isa.copyFilesBuildPhase)`
+   * gives a `CopyFilesBuildPhase | undefined`.
    */
-  findBuildPhase(isa: string, name?: string): BuildPhase | undefined {
-    return this.buildPhases().find((phase) => phase.isa === isa && (name == null || phase.name === name));
+  findBuildPhase<I extends string>(isa: I, name?: string): BuildPhaseOf<I> | undefined {
+    const found = this.buildPhases().find((phase) => phase.isa === isa && (name == null || phase.name === name));
+    // The cast holds because the view factory created each phase from the
+    // same isa the find just matched, and BuildPhaseOf names the class the
+    // factory picks for it. The compiler alone cannot make that connection.
+    return found as BuildPhaseOf<I> | undefined;
   }
 
   /**
    * Returns the target's build phase with the given isa and properties,
    * creating and appending it when missing. The properties apply only on
-   * creation; an existing phase is returned as is.
+   * creation. An existing phase is returned as is, already typed as the
+   * phase class the isa names.
    *
    * The match key is the isa plus the `name` property when one is given,
    * so differently named copy-files phases coexist.
    */
-  ensureBuildPhase(isa: string, properties: PbxprojObject = {}): BuildPhase {
+  ensureBuildPhase<I extends BuildPhaseIsa>(isa: I, properties: PbxprojObject = {}): BuildPhaseOf<I> {
     const name = asString(properties["name"]);
     const existing = this.findBuildPhase(isa, name);
     if (existing != null) {
@@ -178,7 +187,10 @@ export class Target<Properties extends TargetProperties = TargetProperties> exte
       `${isa} ${this.id} ${name ?? ""}`,
     );
     ensureArray(this.properties, "buildPhases").push(phase.id);
-    return phase as BuildPhase;
+    // ViewOf and BuildPhaseOf agree on every phase isa, but while the isa
+    // stays generic the compiler keeps both conditionals unresolved and
+    // cannot equate them.
+    return phase as BuildPhaseOf<I>;
   }
 
   /**
@@ -199,7 +211,7 @@ export class Target<Properties extends TargetProperties = TargetProperties> exte
       shellPath: "/bin/sh",
       shellScript: "",
       ...properties,
-    }) as ShellScriptBuildPhase;
+    });
   }
 
   /**
@@ -235,7 +247,7 @@ export class Target<Properties extends TargetProperties = TargetProperties> exte
       `${Isa.targetDependency} ${this.id} ${dependency.id}`,
     );
     ensureArray(this.properties, "dependencies").push(targetDependency.id);
-    return targetDependency as TargetDependency;
+    return targetDependency;
   }
 }
 
@@ -311,21 +323,21 @@ export class NativeTarget extends Target<NativeTargetProperties> {
    * The target's sources phase, created when missing.
    */
   ensureSourcesPhase(): SourcesBuildPhase {
-    return this.ensureBuildPhase(Isa.sourcesBuildPhase) as SourcesBuildPhase;
+    return this.ensureBuildPhase(Isa.sourcesBuildPhase);
   }
 
   /**
    * The target's frameworks phase, created when missing.
    */
   ensureFrameworksPhase(): FrameworksBuildPhase {
-    return this.ensureBuildPhase(Isa.frameworksBuildPhase) as FrameworksBuildPhase;
+    return this.ensureBuildPhase(Isa.frameworksBuildPhase);
   }
 
   /**
    * The target's resources phase, created when missing.
    */
   ensureResourcesPhase(): ResourcesBuildPhase {
-    return this.ensureBuildPhase(Isa.resourcesBuildPhase) as ResourcesBuildPhase;
+    return this.ensureBuildPhase(Isa.resourcesBuildPhase);
   }
 
   /**
@@ -348,9 +360,7 @@ export class NativeTarget extends Target<NativeTargetProperties> {
     }
 
     const destination = embedDestinationFor(extension.isWatchOS() ? ProductType.watchApp : extension.productType);
-    const phase = this.ensureBuildPhase(Isa.copyFilesBuildPhase, {
-      name: destination.phaseName,
-    }) as CopyFilesBuildPhase;
+    const phase = this.ensureBuildPhase(Isa.copyFilesBuildPhase, { name: destination.phaseName });
 
     // Destination fields are written unconditionally, so a pre-existing
     // phase with the right name but a wrong destination is repaired in
@@ -405,7 +415,7 @@ export class NativeTarget extends Target<NativeTargetProperties> {
     );
     ensureArray(this.properties, "fileSystemSynchronizedGroups").push(group.id);
     this.project.rootProject.mainGroup()?.addChild(group);
-    return group as SyncRootGroup;
+    return group;
   }
 
   /**
@@ -444,7 +454,7 @@ export class NativeTarget extends Target<NativeTargetProperties> {
     );
     ensureArray(this.properties, "packageProductDependencies").push(productDependency.id);
     this.ensureFrameworksPhase().ensureBuildFile(productDependency, { referenceKey: "productRef" });
-    return productDependency as SwiftPackageProductDependency;
+    return productDependency;
   }
 
   /**
@@ -475,7 +485,7 @@ export class NativeTarget extends Target<NativeTargetProperties> {
         sourceTree: "SDKROOT",
       },
       `${Isa.fileReference} ${path}`,
-    ) as FileReference;
+    );
 
     this.ensureFrameworksPhase().ensureBuildFile(reference);
     return reference;
