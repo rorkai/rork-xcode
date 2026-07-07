@@ -738,6 +738,12 @@ export class XcodeProject {
 }
 
 /**
+ * A constructor of an object view, the shape shared by every entry of
+ * {@link VIEWS} and by the factory registry built from it.
+ */
+type ViewConstructor = new (project: XcodeProject, id: string) => XcodeObject;
+
+/**
  * The view class for every isa of the vocabulary. The runtime registry
  * and the {@link ViewByIsa} type are both derived from this one object,
  * so the class an object routes to and the class its isa literal promises
@@ -776,12 +782,12 @@ const VIEWS = {
   [Isa.targetDependency]: TargetDependency,
   [Isa.variantGroup]: VariantGroup,
   [Isa.versionGroup]: VersionGroup,
-} as const satisfies Record<IsaValue, new (project: XcodeProject, id: string) => XcodeObject>;
+} as const satisfies Record<IsaValue, ViewConstructor>;
 
 /**
  * View constructors by the isa they model, in `Map` form for the factory.
  */
-const VIEW_BY_ISA = new Map<string, new (project: XcodeProject, id: string) => XcodeObject>(Object.entries(VIEWS));
+const VIEW_BY_ISA = new Map<string, ViewConstructor>(Object.entries(VIEWS));
 
 /**
  * The view class each isa of the vocabulary maps to, as a type. Derived
