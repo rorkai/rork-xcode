@@ -11,9 +11,11 @@
   "rules": {
     "eqeqeq": ["error", "always", { "null": "ignore" }],
     // Named specifiers sort values before types. Whole import statements
-    // are grouped by the formatter (experimentalSortImports).
+    // are grouped by the formatter (experimentalSortImports); the formatter
+    // has no export counterpart, so sort-exports covers whole statements.
     "perfectionist/sort-named-imports": ["error", { "groups": ["value-import", "type-import"] }],
     "perfectionist/sort-named-exports": ["error", { "groups": ["value-export", "type-export"] }],
+    "perfectionist/sort-exports": "error",
     "no-console": "error",
     "typescript/consistent-type-imports": "error",
     // The scanner intentionally operates on UTF-16 code units: unit-wise
