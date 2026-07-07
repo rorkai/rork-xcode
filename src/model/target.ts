@@ -22,6 +22,11 @@ import {
   SwiftPackageProductDependency,
   SyncRootGroup,
   TargetDependency,
+  type CopyFilesBuildPhase,
+  type FrameworksBuildPhase,
+  type ResourcesBuildPhase,
+  type ShellScriptBuildPhase,
+  type SourcesBuildPhase,
 } from "./objects";
 import { configurationsOf, defaultConfigurationSettingsOf } from "./settings";
 import { asString, ensureArray, stringItems } from "./values";
@@ -173,8 +178,6 @@ export class Target<Properties extends TargetProperties = TargetProperties> exte
       `${isa} ${this.id} ${name ?? ""}`,
     );
     ensureArray(this.properties, "buildPhases").push(phase.id);
-    // The factory typed the view by its isa; every *BuildPhase isa maps to
-    // BuildPhase, so this cast never observes another shape.
     return phase as BuildPhase;
   }
 
@@ -186,7 +189,7 @@ export class Target<Properties extends TargetProperties = TargetProperties> exte
    * @param name Display name of the phase, which is also its match key.
    * @param properties Phase properties, most usefully `shellScript`.
    */
-  ensureShellScriptPhase(name: string, properties: PbxprojObject = {}): BuildPhase {
+  ensureShellScriptPhase(name: string, properties: PbxprojObject = {}): ShellScriptBuildPhase {
     return this.ensureBuildPhase(Isa.shellScriptBuildPhase, {
       inputFileListPaths: [],
       inputPaths: [],
@@ -196,7 +199,7 @@ export class Target<Properties extends TargetProperties = TargetProperties> exte
       shellPath: "/bin/sh",
       shellScript: "",
       ...properties,
-    });
+    }) as ShellScriptBuildPhase;
   }
 
   /**
@@ -232,7 +235,6 @@ export class Target<Properties extends TargetProperties = TargetProperties> exte
       `${Isa.targetDependency} ${this.id} ${dependency.id}`,
     );
     ensureArray(this.properties, "dependencies").push(targetDependency.id);
-    // The factory maps the target-dependency isa to TargetDependency.
     return targetDependency as TargetDependency;
   }
 }
@@ -242,7 +244,7 @@ export class Target<Properties extends TargetProperties = TargetProperties> exte
  * itself, such as an application or an app extension.
  */
 export class NativeTarget extends Target<NativeTargetProperties> {
-  static readonly isas: readonly string[] = [Isa.nativeTarget];
+  static readonly isa: string | null = Isa.nativeTarget;
 
   /**
    * The target's product type identifier, for example
@@ -308,22 +310,22 @@ export class NativeTarget extends Target<NativeTargetProperties> {
   /**
    * The target's sources phase, created when missing.
    */
-  ensureSourcesPhase(): BuildPhase {
-    return this.ensureBuildPhase(Isa.sourcesBuildPhase);
+  ensureSourcesPhase(): SourcesBuildPhase {
+    return this.ensureBuildPhase(Isa.sourcesBuildPhase) as SourcesBuildPhase;
   }
 
   /**
    * The target's frameworks phase, created when missing.
    */
-  ensureFrameworksPhase(): BuildPhase {
-    return this.ensureBuildPhase(Isa.frameworksBuildPhase);
+  ensureFrameworksPhase(): FrameworksBuildPhase {
+    return this.ensureBuildPhase(Isa.frameworksBuildPhase) as FrameworksBuildPhase;
   }
 
   /**
    * The target's resources phase, created when missing.
    */
-  ensureResourcesPhase(): BuildPhase {
-    return this.ensureBuildPhase(Isa.resourcesBuildPhase);
+  ensureResourcesPhase(): ResourcesBuildPhase {
+    return this.ensureBuildPhase(Isa.resourcesBuildPhase) as ResourcesBuildPhase;
   }
 
   /**
@@ -339,17 +341,20 @@ export class NativeTarget extends Target<NativeTargetProperties> {
    * @returns The view of the embed phase, or `undefined` when the embedded
    *   target has no product reference to embed.
    */
-  embed(extension: NativeTarget): BuildPhase | undefined {
+  embed(extension: NativeTarget): CopyFilesBuildPhase | undefined {
     const product = extension.productReference;
     if (product == null) {
       return undefined;
     }
 
     const destination = embedDestinationFor(extension.isWatchOS() ? ProductType.watchApp : extension.productType);
-    const phase = this.ensureBuildPhase(Isa.copyFilesBuildPhase, { name: destination.phaseName });
+    const phase = this.ensureBuildPhase(Isa.copyFilesBuildPhase, {
+      name: destination.phaseName,
+    }) as CopyFilesBuildPhase;
 
-    // Destination fields are written unconditionally: a pre-existing phase
-    // with the right name but a wrong destination is repaired in passing.
+    // Destination fields are written unconditionally, so a pre-existing
+    // phase with the right name but a wrong destination is repaired in
+    // passing.
     phase.set("dstPath", destination.dstPath);
     phase.set("dstSubfolderSpec", destination.dstSubfolderSpec);
     phase.ensureBuildFile(product, { settings: { ATTRIBUTES: ["RemoveHeadersOnCopy"] } });
@@ -400,7 +405,6 @@ export class NativeTarget extends Target<NativeTargetProperties> {
     );
     ensureArray(this.properties, "fileSystemSynchronizedGroups").push(group.id);
     this.project.rootProject.mainGroup()?.addChild(group);
-    // The factory maps the sync-group isa to SyncRootGroup.
     return group as SyncRootGroup;
   }
 
@@ -440,8 +444,6 @@ export class NativeTarget extends Target<NativeTargetProperties> {
     );
     ensureArray(this.properties, "packageProductDependencies").push(productDependency.id);
     this.ensureFrameworksPhase().ensureBuildFile(productDependency, { referenceKey: "productRef" });
-    // The factory maps the product-dependency isa to
-    // SwiftPackageProductDependency.
     return productDependency as SwiftPackageProductDependency;
   }
 
@@ -464,7 +466,6 @@ export class NativeTarget extends Target<NativeTargetProperties> {
         break;
       }
     }
-    // The factory maps the file-reference isa to FileReference.
     reference ??= this.project.add(
       Isa.fileReference,
       {
@@ -487,7 +488,7 @@ export class NativeTarget extends Target<NativeTargetProperties> {
  * phases, and the shared target surface covers everything it carries.
  */
 export class AggregateTarget extends Target {
-  static readonly isas: readonly string[] = [Isa.aggregateTarget];
+  static readonly isa: string | null = Isa.aggregateTarget;
 }
 
 /**
@@ -495,7 +496,7 @@ export class AggregateTarget extends Target {
  * instead of using Xcode's build system.
  */
 export class LegacyTarget extends Target<LegacyTargetProperties> {
-  static readonly isas: readonly string[] = [Isa.legacyTarget];
+  static readonly isa: string | null = Isa.legacyTarget;
   /**
    * The build tool the target invokes, as an absolute path.
    */

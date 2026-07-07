@@ -15,8 +15,10 @@
  */
 export const Isa = {
   aggregateTarget: "PBXAggregateTarget",
+  appleScriptBuildPhase: "PBXAppleScriptBuildPhase",
   buildFile: "PBXBuildFile",
   buildRule: "PBXBuildRule",
+  buildStyle: "PBXBuildStyle",
   containerItemProxy: "PBXContainerItemProxy",
   copyFilesBuildPhase: "PBXCopyFilesBuildPhase",
   fileReference: "PBXFileReference",
@@ -32,6 +34,7 @@ export const Isa = {
   project: "PBXProject",
   referenceProxy: "PBXReferenceProxy",
   resourcesBuildPhase: "PBXResourcesBuildPhase",
+  rezBuildPhase: "PBXRezBuildPhase",
   shellScriptBuildPhase: "PBXShellScriptBuildPhase",
   sourcesBuildPhase: "PBXSourcesBuildPhase",
   targetDependency: "PBXTargetDependency",

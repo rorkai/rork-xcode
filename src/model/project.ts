@@ -20,16 +20,28 @@ import { pruneOrphanObjects, validateProject, type ProjectIssue } from "./doctor
 import { DEPLOYMENT_TARGET_KEY, Isa, PRODUCT_FILE_INFO, ProductType, type ApplePlatform } from "./isa";
 import { XcodeObject } from "./object";
 import {
+  AppleScriptBuildPhase,
   BuildConfiguration,
   BuildFile,
+  BuildFileExceptionSet,
   BuildPhase,
+  BuildPhaseMembershipExceptionSet,
   BuildRule,
+  BuildStyle,
   ConfigurationList,
   ContainerItemProxy,
-  ExceptionSet,
+  CopyFilesBuildPhase,
   FileReference,
+  FrameworksBuildPhase,
   Group,
+  HeadersBuildPhase,
+  LocalSwiftPackageReference,
   ReferenceProxy,
+  RemoteSwiftPackageReference,
+  ResourcesBuildPhase,
+  RezBuildPhase,
+  ShellScriptBuildPhase,
+  SourcesBuildPhase,
   SwiftPackageProductDependency,
   SwiftPackageReference,
   SyncRootGroup,
@@ -49,7 +61,7 @@ import type { RootProjectProperties } from "./properties";
  * the main group, and the project-level configurations.
  */
 export class RootProject extends XcodeObject<RootProjectProperties> {
-  static readonly isas: readonly string[] = [Isa.project];
+  static readonly isa: string | null = Isa.project;
 
   /**
    * Ids of the project's targets, in project order.
@@ -101,7 +113,6 @@ export class RootProject extends XcodeObject<RootProjectProperties> {
     );
     this.mainGroup()?.addChild(group);
     this.set("productRefGroup", group.id);
-    // The factory maps the group isa to Group.
     return group as Group;
   }
 }
@@ -411,8 +422,6 @@ export class XcodeProject {
       `${Isa.nativeTarget} ${options.name}`,
     );
     ensureArray(this.rootProject.properties, "targets").push(target.id);
-
-    // The factory maps the native-target isa to NativeTarget.
     const nativeTarget = target as NativeTarget;
     nativeTarget.ensureSourcesPhase();
     nativeTarget.ensureFrameworksPhase();
@@ -423,8 +432,11 @@ export class XcodeProject {
   /**
    * Finds the remote Swift package reference for a repository URL.
    */
-  findSwiftPackage(repositoryUrl: string): SwiftPackageReference | undefined {
-    return this.rootProject.packageReferences().find((reference) => reference.repositoryURL === repositoryUrl);
+  findSwiftPackage(repositoryUrl: string): RemoteSwiftPackageReference | undefined {
+    return this.rootProject
+      .packageReferences()
+      .filter((reference) => RemoteSwiftPackageReference.is(reference))
+      .find((reference) => reference.repositoryURL === repositoryUrl);
   }
 
   /**
@@ -440,7 +452,10 @@ export class XcodeProject {
    *   `{ kind: "upToNextMajorVersion", minimumVersion: "5.0.0" }`.
    * @returns The view of the package reference for the repository.
    */
-  addSwiftPackage(options: { repositoryURL: string; requirement: Record<string, string> }): SwiftPackageReference {
+  addSwiftPackage(options: {
+    repositoryURL: string;
+    requirement: Record<string, string>;
+  }): RemoteSwiftPackageReference {
     const existing = this.findSwiftPackage(options.repositoryURL);
     if (existing != null) {
       return existing;
@@ -451,17 +466,17 @@ export class XcodeProject {
       `${Isa.remoteSwiftPackageReference} ${options.repositoryURL}`,
     );
     ensureArray(this.rootProject.properties, "packageReferences").push(reference.id);
-    // The factory maps the package-reference isas to SwiftPackageReference.
-    return reference as SwiftPackageReference;
+    return reference as RemoteSwiftPackageReference;
   }
 
   /**
    * Finds the local Swift package reference for a directory path.
    */
-  findLocalSwiftPackage(relativePath: string): SwiftPackageReference | undefined {
+  findLocalSwiftPackage(relativePath: string): LocalSwiftPackageReference | undefined {
     return this.rootProject
       .packageReferences()
-      .find((reference) => reference.isa === Isa.localSwiftPackageReference && reference.relativePath === relativePath);
+      .filter((reference) => LocalSwiftPackageReference.is(reference))
+      .find((reference) => reference.relativePath === relativePath);
   }
 
   /**
@@ -473,7 +488,7 @@ export class XcodeProject {
    * @param relativePath The package directory, relative to the project.
    * @returns The view of the package reference for the path.
    */
-  addLocalSwiftPackage(relativePath: string): SwiftPackageReference {
+  addLocalSwiftPackage(relativePath: string): LocalSwiftPackageReference {
     const existing = this.findLocalSwiftPackage(relativePath);
     if (existing != null) {
       return existing;
@@ -484,8 +499,7 @@ export class XcodeProject {
       `${Isa.localSwiftPackageReference} ${relativePath}`,
     );
     ensureArray(this.rootProject.properties, "packageReferences").push(reference.id);
-    // The factory maps the package-reference isas to SwiftPackageReference.
-    return reference as SwiftPackageReference;
+    return reference as LocalSwiftPackageReference;
   }
 
   /**
@@ -720,26 +734,36 @@ export class XcodeProject {
 
 /**
  * Every concrete view class of the object model. The registry below is
- * derived from this list, so adding a view class with its `isas` is all
+ * derived from this list, so adding a view class with its `isa` is all
  * it takes to route objects of that kind to it.
  */
 const VIEW_CLASSES = [
   AggregateTarget,
+  AppleScriptBuildPhase,
   BuildConfiguration,
   BuildFile,
-  BuildPhase,
+  BuildFileExceptionSet,
+  BuildPhaseMembershipExceptionSet,
   BuildRule,
+  BuildStyle,
   ConfigurationList,
   ContainerItemProxy,
-  ExceptionSet,
+  CopyFilesBuildPhase,
   FileReference,
+  FrameworksBuildPhase,
   Group,
+  HeadersBuildPhase,
   LegacyTarget,
+  LocalSwiftPackageReference,
   NativeTarget,
   ReferenceProxy,
+  RemoteSwiftPackageReference,
+  ResourcesBuildPhase,
+  RezBuildPhase,
   RootProject,
+  ShellScriptBuildPhase,
+  SourcesBuildPhase,
   SwiftPackageProductDependency,
-  SwiftPackageReference,
   SyncRootGroup,
   TargetDependency,
   VariantGroup,
@@ -747,13 +771,13 @@ const VIEW_CLASSES = [
 ] as const;
 
 /**
- * View constructors by the isa they cover, built from each class's own
- * `isas` declaration.
+ * View constructors by the isa they model, built from each class's own
+ * `isa` declaration.
  */
 const VIEW_BY_ISA = new Map<string, new (project: XcodeProject, id: string) => XcodeObject>();
 for (const viewClass of VIEW_CLASSES) {
-  for (const isa of viewClass.isas) {
-    VIEW_BY_ISA.set(isa, viewClass);
+  if (viewClass.isa != null) {
+    VIEW_BY_ISA.set(viewClass.isa, viewClass);
   }
 }
 

@@ -29,13 +29,13 @@ import type { XcodeProject } from "./project";
  */
 export class XcodeObject<Properties extends PbxprojObject = PbxprojObject> {
   /**
-   * The `isa` names this view class covers. Each concrete view declares
-   * its own, and the project's view factory dispatches on them, so the
-   * class itself is the source of truth for which objects it models. The
-   * base class covers none and serves as the fallback for kinds outside
-   * the typed vocabulary.
+   * The `isa` name this view class models. Each concrete view declares
+   * its own, and the project's view factory dispatches on it, so the
+   * class itself is the source of truth for which objects it covers.
+   * Classes that only share behavior, like this base class and the
+   * abstract target and phase bases, declare `null` and never route.
    */
-  static readonly isas: readonly string[] = [];
+  static readonly isa: string | null = null;
 
   /** The project this object belongs to. */
   readonly project: XcodeProject;

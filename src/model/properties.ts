@@ -149,21 +149,33 @@ export interface ReferenceProxyProperties extends PbxprojObject {
 }
 
 /**
- * Properties shared by the `PBX*BuildPhase` kinds. Copy-files and
- * shell-script phases carry the destination and script keys. The standard
- * phases leave them absent.
+ * Properties shared by every `PBX*BuildPhase` kind.
  */
 export interface BuildPhaseProperties extends PbxprojObject {
   buildActionMask?: number;
+  files?: string[];
+  name?: string;
+  runOnlyForDeploymentPostprocessing?: number;
+}
+
+/**
+ * Properties of a `PBXCopyFilesBuildPhase`, which adds the destination
+ * the files are copied to.
+ */
+export interface CopyFilesBuildPhaseProperties extends BuildPhaseProperties {
   dstPath?: string;
   dstSubfolderSpec?: number;
-  files?: string[];
+}
+
+/**
+ * Properties of a `PBXShellScriptBuildPhase`, which adds the script, its
+ * interpreter, and the declared inputs and outputs.
+ */
+export interface ShellScriptBuildPhaseProperties extends BuildPhaseProperties {
   inputFileListPaths?: string[];
   inputPaths?: string[];
-  name?: string;
   outputFileListPaths?: string[];
   outputPaths?: string[];
-  runOnlyForDeploymentPostprocessing?: number;
   shellPath?: string;
   shellScript?: string;
 }
@@ -239,14 +251,26 @@ export interface ContainerItemProxyProperties extends PbxprojObject {
 }
 
 /**
- * Properties of an `XCRemoteSwiftPackageReference` or
- * `XCLocalSwiftPackageReference`. Remote references carry the repository
- * and requirement. Local ones carry the relative path.
+ * Properties shared by the Swift package reference kinds. The remote and
+ * local interfaces below add their own keys.
  */
-export interface SwiftPackageReferenceProperties extends PbxprojObject {
-  relativePath?: string;
+export interface SwiftPackageReferenceProperties extends PbxprojObject {}
+
+/**
+ * Properties of an `XCRemoteSwiftPackageReference`, which names a
+ * repository and a version requirement.
+ */
+export interface RemoteSwiftPackageReferenceProperties extends SwiftPackageReferenceProperties {
   repositoryURL?: string;
   requirement?: PbxprojObject;
+}
+
+/**
+ * Properties of an `XCLocalSwiftPackageReference`, which names a package
+ * directory relative to the project.
+ */
+export interface LocalSwiftPackageReferenceProperties extends SwiftPackageReferenceProperties {
+  relativePath?: string;
 }
 
 /**
@@ -258,11 +282,27 @@ export interface SwiftPackageProductDependencyProperties extends PbxprojObject {
 }
 
 /**
- * Properties of a `PBXFileSystemSynchronizedBuildFileExceptionSet` or its
- * build-phase-membership variant.
+ * Properties shared by the synchronized-folder exception set kinds.
  */
 export interface ExceptionSetProperties extends PbxprojObject {
-  buildPhase?: string;
   membershipExceptions?: string[];
   target?: string;
+}
+
+/**
+ * Properties of a
+ * `PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet`, which
+ * adds the build phase the listed files belong to.
+ */
+export interface BuildPhaseMembershipExceptionSetProperties extends ExceptionSetProperties {
+  buildPhase?: string;
+}
+
+/**
+ * Properties of a `PBXBuildStyle`, the pre-Xcode-2 predecessor of
+ * `XCBuildConfiguration` still found in old documents.
+ */
+export interface BuildStyleProperties extends PbxprojObject {
+  buildSettings?: BuildSettings;
+  name?: string;
 }
