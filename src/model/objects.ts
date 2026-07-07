@@ -308,8 +308,10 @@ export class ShellScriptBuildPhase extends BuildPhase<ShellScriptBuildPhasePrope
 }
 
 /**
- * A `PBXRezBuildPhase` compiles Carbon resource files. Current Xcode no
- * longer creates these, but old documents still carry them.
+ * A `PBXRezBuildPhase` runs Rez, the classic Mac OS resource compiler,
+ * over `.r` files. Xcode's UI called it "Build Carbon Resources".
+ * Current Xcode no longer creates these phases, but old documents still
+ * carry them.
  */
 export class RezBuildPhase extends BuildPhase {
   static readonly isa: string | null = Isa.rezBuildPhase;
