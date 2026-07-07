@@ -6,10 +6,13 @@ import { join } from "node:path";
 import {
   AggregateTarget,
   BuildConfiguration,
+  BuildFile,
   BuildPhase,
   BuildRule,
+  ConfigurationList,
   ContainerItemProxy,
   CopyFilesDestination,
+  ExceptionSet,
   FileReference,
   Group,
   Isa,
@@ -17,8 +20,12 @@ import {
   NativeTarget,
   ProductType,
   ReferenceProxy,
+  SwiftPackageProductDependency,
+  SwiftPackageReference,
+  TargetDependency,
   VersionGroup,
   XcodeModelError,
+  XcodeObject,
   XcodeProject,
   type PbxprojObject,
   type SyncRootGroup,
@@ -751,6 +758,55 @@ describe("aggregate targets, legacy targets, and exotic references", () => {
 });
 
 describe("typed views and narrowing", () => {
+  it("covers every Isa value with a typed view class", () => {
+    const project = XcodeProject.fromDocument({ objects: {}, rootObject: "XXROOT000000000000000000" });
+    for (const isa of Object.values(Isa)) {
+      const view = project.add(isa, {});
+      // The base class marks a kind outside the vocabulary; every listed
+      // isa must map to a concrete view.
+      expect(view.constructor, isa).not.toBe(XcodeObject);
+    }
+  });
+
+  it("resolves typed relationships across the graph", () => {
+    const project = openApp();
+    const app = project.findMainAppTarget("ios");
+    assert(app);
+
+    const list = app.configurationList();
+    assert(ConfigurationList.is(list));
+    expect(list.defaultConfigurationName).toBe("Release");
+    expect(list.configurations().map((configuration) => configuration.name)).toEqual(["Debug", "Release"]);
+
+    const widget = project.addNativeTarget({ name: "Widget", productType: ProductType.appExtension });
+    const dependency = app.addDependency(widget);
+    assert(TargetDependency.is(dependency));
+    expect(dependency.target()).toBe(widget);
+    expect(dependency.targetProxy()?.remoteInfo).toBe("Widget");
+
+    const packageReference = project.addSwiftPackage({
+      repositoryURL: "https://github.com/example/demo-kit.git",
+      requirement: { kind: "upToNextMajorVersion", minimumVersion: "1.0.0" },
+    });
+    assert(SwiftPackageReference.is(packageReference));
+    expect(packageReference.repositoryURL).toBe("https://github.com/example/demo-kit.git");
+
+    const product = app.addSwiftPackageProduct({ productName: "DemoKit", packageReference });
+    assert(SwiftPackageProductDependency.is(product));
+    expect(product.productName).toBe("DemoKit");
+    expect(product.packageReference()).toBe(packageReference);
+
+    const [buildFile] = project.buildFilesReferencing(product);
+    assert(BuildFile.is(buildFile));
+    expect(buildFile.productDependency()).toBe(product);
+
+    const syncGroup = widget.addSyncGroup("Widget");
+    const exceptionSet = syncGroup.addMembershipExceptions(widget, ["Info.plist"]);
+    assert(ExceptionSet.is(exceptionSet));
+    expect(exceptionSet.membershipExceptions).toEqual(["Info.plist"]);
+    expect(exceptionSet.target()).toBe(widget);
+  });
+
   it("narrows mixed objects with the is() helper", () => {
     const project = openApp();
     const app = project.findMainAppTarget("ios");

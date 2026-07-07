@@ -15,25 +15,31 @@ import { asDictionary, ensureArray, stringItems } from "./values";
 
 import type {
   BuildConfigurationProperties,
+  BuildFileProperties,
   BuildPhaseProperties,
   BuildRuleProperties,
   BuildSettings,
+  ConfigurationListProperties,
   ContainerItemProxyProperties,
+  ExceptionSetProperties,
   FileReferenceProperties,
   GroupProperties,
   ReferenceProxyProperties,
+  SwiftPackageProductDependencyProperties,
+  SwiftPackageReferenceProperties,
   SyncRootGroupProperties,
+  TargetDependencyProperties,
   VersionGroupProperties,
 } from "./properties";
 import type { NativeTarget } from "./target";
 
 /**
  * A `PBXGroup` is a folder in Xcode's navigator, holding references to
- * files and other groups. Variant groups (`PBXVariantGroup`) share this
- * view. The type parameter lets subclasses carry a more specific property
- * shape.
+ * files and other groups. The type parameter lets subclasses carry a more
+ * specific property shape.
  */
 export class Group<Properties extends GroupProperties = GroupProperties> extends XcodeObject<Properties> {
+  static readonly isas: readonly string[] = [Isa.group];
   /**
    * Ids of the group's children, in navigator order. Non-string entries of
    * a malformed document are skipped.
@@ -126,10 +132,28 @@ export class Group<Properties extends GroupProperties = GroupProperties> extends
 }
 
 /**
+ * A `PBXVariantGroup` holds the localized variants of one file, one child
+ * per language. Everything else behaves like a plain group.
+ */
+export class VariantGroup extends Group {
+  static readonly isas: readonly string[] = [Isa.variantGroup];
+}
+
+/**
  * A build phase is an ordered list of build files processed by one step
- * of a target's build. Every `PBX*BuildPhase` kind shares this view.
+ * of a target's build. Every `PBX*BuildPhase` kind shares this view, and
+ * kinds outside the list below still map here through the factory's
+ * suffix fallback.
  */
 export class BuildPhase extends XcodeObject<BuildPhaseProperties> {
+  static readonly isas: readonly string[] = [
+    Isa.copyFilesBuildPhase,
+    Isa.frameworksBuildPhase,
+    Isa.headersBuildPhase,
+    Isa.resourcesBuildPhase,
+    Isa.shellScriptBuildPhase,
+    Isa.sourcesBuildPhase,
+  ];
   /**
    * The phase's display name, when it carries an explicit one. Xcode names
    * copy-files and shell-script phases; the standard phases derive their
@@ -191,12 +215,12 @@ export class BuildPhase extends XcodeObject<BuildPhaseProperties> {
   ensureBuildFile(
     reference: XcodeObject,
     options: { referenceKey?: "fileRef" | "productRef"; settings?: Record<string, string[] | string> } = {},
-  ): XcodeObject {
+  ): BuildFile {
     const referenceKey = options.referenceKey ?? "fileRef";
 
     for (const buildFileId of this.buildFileIds) {
       const existing = this.project.get(buildFileId);
-      if (existing?.getString(referenceKey) === reference.id) {
+      if (BuildFile.is(existing) && existing.getString(referenceKey) === reference.id) {
         return existing;
       }
     }
@@ -210,7 +234,34 @@ export class BuildPhase extends XcodeObject<BuildPhaseProperties> {
       `${Isa.buildFile} ${this.id} ${reference.id}`,
     );
     this.appendBuildFile(buildFile.id);
-    return buildFile;
+    // The factory maps the build-file isa to BuildFile.
+    return buildFile as BuildFile;
+  }
+}
+
+/**
+ * A `PBXBuildFile` places one file reference or package product inside
+ * one build phase, optionally with per-file settings.
+ */
+export class BuildFile extends XcodeObject<BuildFileProperties> {
+  static readonly isas: readonly string[] = [Isa.buildFile];
+
+  /**
+   * The view of the file reference the build file points at, when it
+   * points at one. Build files for Swift package products carry a
+   * `productRef` instead; see {@link productDependency}.
+   */
+  fileReference(): XcodeObject | undefined {
+    return this.project.get(this.getString("fileRef"));
+  }
+
+  /**
+   * The view of the Swift package product dependency the build file
+   * points at, when it points at one.
+   */
+  productDependency(): SwiftPackageProductDependency | undefined {
+    const view = this.project.get(this.getString("productRef"));
+    return SwiftPackageProductDependency.is(view) ? view : undefined;
   }
 }
 
@@ -219,6 +270,8 @@ export class BuildPhase extends XcodeObject<BuildPhaseProperties> {
  * members are synchronized from disk instead of listed individually.
  */
 export class SyncRootGroup extends XcodeObject<SyncRootGroupProperties> {
+  static readonly isas: readonly string[] = [Isa.fileSystemSynchronizedRootGroup];
+
   /**
    * The group's on-disk folder path, when present.
    */
@@ -244,11 +297,12 @@ export class SyncRootGroup extends XcodeObject<SyncRootGroupProperties> {
    * @param membershipExceptions File names inside the folder to exclude.
    * @returns The view of the target's exception set for this folder.
    */
-  addMembershipExceptions(target: NativeTarget, membershipExceptions: string[]): XcodeObject {
+  addMembershipExceptions(target: NativeTarget, membershipExceptions: string[]): ExceptionSet {
     for (const id of stringItems(this.properties["exceptions"])) {
       const existing = this.project.get(id);
       if (
-        existing?.isa === Isa.fileSystemSynchronizedBuildFileExceptionSet &&
+        ExceptionSet.is(existing) &&
+        existing.isa === Isa.fileSystemSynchronizedBuildFileExceptionSet &&
         existing.getString("target") === target.id
       ) {
         const names = ensureArray(existing.properties, "membershipExceptions");
@@ -270,7 +324,36 @@ export class SyncRootGroup extends XcodeObject<SyncRootGroupProperties> {
       `${Isa.fileSystemSynchronizedBuildFileExceptionSet} ${this.id} ${target.id}`,
     );
     ensureArray(this.properties, "exceptions").push(exceptionSet.id);
-    return exceptionSet;
+    // The factory maps the exception-set isas to ExceptionSet.
+    return exceptionSet as ExceptionSet;
+  }
+}
+
+/**
+ * A `PBXFileSystemSynchronizedBuildFileExceptionSet` or its
+ * build-phase-membership variant. Exception sets carve files out of a
+ * synchronized folder's automatic membership for one target.
+ */
+export class ExceptionSet extends XcodeObject<ExceptionSetProperties> {
+  static readonly isas: readonly string[] = [
+    Isa.fileSystemSynchronizedBuildFileExceptionSet,
+    Isa.fileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet,
+  ];
+
+  /**
+   * The file names the set excludes, in declaration order. Non-string
+   * entries of a malformed document are skipped.
+   */
+  get membershipExceptions(): string[] {
+    return stringItems(this.properties["membershipExceptions"]);
+  }
+
+  /**
+   * The view of the target whose membership the set restricts, when the
+   * reference resolves.
+   */
+  target(): XcodeObject | undefined {
+    return this.project.get(this.getString("target"));
   }
 }
 
@@ -279,6 +362,7 @@ export class SyncRootGroup extends XcodeObject<SyncRootGroupProperties> {
  * kind of file.
  */
 export class BuildRule extends XcodeObject<BuildRuleProperties> {
+  static readonly isas: readonly string[] = [Isa.buildRule];
   /**
    * The rule's script, when it is a script rule rather than a reference
    * to a compiler specification.
@@ -294,6 +378,8 @@ export class BuildRule extends XcodeObject<BuildRuleProperties> {
  * `currentVersion` names the active one.
  */
 export class VersionGroup extends Group<VersionGroupProperties> {
+  static readonly isas: readonly string[] = [Isa.versionGroup];
+
   /**
    * The view of the active model version's file reference, when the group
    * names one.
@@ -318,6 +404,8 @@ export class VersionGroup extends Group<VersionGroupProperties> {
  * target or of the project, for example Debug or Release.
  */
 export class BuildConfiguration extends XcodeObject<BuildConfigurationProperties> {
+  static readonly isas: readonly string[] = [Isa.buildConfiguration];
+
   /**
    * The configuration's name, when present.
    */
@@ -341,6 +429,8 @@ export class BuildConfiguration extends XcodeObject<BuildConfigurationProperties
  * built products themselves.
  */
 export class FileReference extends XcodeObject<FileReferenceProperties> {
+  static readonly isas: readonly string[] = [Isa.fileReference];
+
   /**
    * The reference's path, relative to its `sourceTree`, when present.
    */
@@ -362,6 +452,8 @@ export class FileReference extends XcodeObject<FileReferenceProperties> {
  * target dependency and the target it points at.
  */
 export class ContainerItemProxy extends XcodeObject<ContainerItemProxyProperties> {
+  static readonly isas: readonly string[] = [Isa.containerItemProxy];
+
   /**
    * The display name of the object the proxy points at, when present.
    * For target dependencies this is the target's name.
@@ -372,10 +464,116 @@ export class ContainerItemProxy extends XcodeObject<ContainerItemProxyProperties
 }
 
 /**
+ * A `PBXTargetDependency` records that one target must build before
+ * another, through a container item proxy naming the prerequisite.
+ */
+export class TargetDependency extends XcodeObject<TargetDependencyProperties> {
+  static readonly isas: readonly string[] = [Isa.targetDependency];
+
+  /**
+   * The view of the target this dependency points at, when the reference
+   * resolves to one inside this document.
+   */
+  target(): XcodeObject | undefined {
+    return this.project.get(this.getString("target"));
+  }
+
+  /**
+   * The view of the dependency's container item proxy, when the reference
+   * resolves.
+   */
+  targetProxy(): ContainerItemProxy | undefined {
+    const view = this.project.get(this.getString("targetProxy"));
+    return ContainerItemProxy.is(view) ? view : undefined;
+  }
+}
+
+/**
+ * An `XCConfigurationList` owns the named build configurations of one
+ * target or of the project, plus the default configuration choice.
+ */
+export class ConfigurationList extends XcodeObject<ConfigurationListProperties> {
+  static readonly isas: readonly string[] = [Isa.configurationList];
+
+  /**
+   * The name of the configuration builds use when none is specified, when
+   * present.
+   */
+  get defaultConfigurationName(): string | undefined {
+    return this.getString("defaultConfigurationName");
+  }
+
+  /**
+   * The views of the list's build configurations, in list order. Dangling
+   * ids and objects of other kinds are skipped.
+   */
+  configurations(): BuildConfiguration[] {
+    const configurations: BuildConfiguration[] = [];
+    for (const id of stringItems(this.properties["buildConfigurations"])) {
+      const view = this.project.get(id);
+      if (BuildConfiguration.is(view)) {
+        configurations.push(view);
+      }
+    }
+    return configurations;
+  }
+}
+
+/**
+ * An `XCRemoteSwiftPackageReference` or `XCLocalSwiftPackageReference`.
+ * Remote references name a repository and version requirement, and local
+ * ones name a path relative to the project.
+ */
+export class SwiftPackageReference extends XcodeObject<SwiftPackageReferenceProperties> {
+  static readonly isas: readonly string[] = [Isa.localSwiftPackageReference, Isa.remoteSwiftPackageReference];
+
+  /**
+   * The remote package's repository URL, when this is a remote reference.
+   */
+  get repositoryURL(): string | undefined {
+    return this.getString("repositoryURL");
+  }
+
+  /**
+   * The local package's path relative to the project, when this is a
+   * local reference.
+   */
+  get relativePath(): string | undefined {
+    return this.getString("relativePath");
+  }
+}
+
+/**
+ * An `XCSwiftPackageProductDependency` links one product of a Swift
+ * package to the target that consumes it.
+ */
+export class SwiftPackageProductDependency extends XcodeObject<SwiftPackageProductDependencyProperties> {
+  static readonly isas: readonly string[] = [Isa.swiftPackageProductDependency];
+
+  /**
+   * The product's name as the package manifest declares it, when present.
+   */
+  get productName(): string | undefined {
+    return this.getString("productName");
+  }
+
+  /**
+   * The view of the package reference the product comes from, when the
+   * reference resolves. Products of local packages can omit it.
+   */
+  packageReference(): SwiftPackageReference | undefined {
+    const view = this.project.get(this.getString("package"));
+    return SwiftPackageReference.is(view) ? view : undefined;
+  }
+}
+
+/**
  * A `PBXReferenceProxy` stands in for a product built by a target of
  * another project referenced from this one.
  */
 export class ReferenceProxy extends XcodeObject<ReferenceProxyProperties> {
+  static readonly isas: readonly string[] = [Isa.referenceProxy];
+
   /**
    * The proxy's product path inside the other project's build directory,
    * when present.
@@ -388,8 +586,8 @@ export class ReferenceProxy extends XcodeObject<ReferenceProxyProperties> {
    * The view of the container item proxy that names the remote target,
    * when the reference resolves.
    */
-  remoteReference(): XcodeObject | undefined {
-    const id = this.getString("remoteRef");
-    return id == null ? undefined : this.project.get(id);
+  remoteReference(): ContainerItemProxy | undefined {
+    const view = this.project.get(this.getString("remoteRef"));
+    return ContainerItemProxy.is(view) ? view : undefined;
   }
 }

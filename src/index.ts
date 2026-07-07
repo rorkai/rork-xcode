@@ -28,13 +28,20 @@ export { CopyFilesDestination, Isa, ProductType, type ApplePlatform } from "./mo
 export { XcodeObject } from "./model/object";
 export {
   BuildConfiguration,
+  BuildFile,
   BuildPhase,
   BuildRule,
+  ConfigurationList,
   ContainerItemProxy,
+  ExceptionSet,
   FileReference,
   Group,
   ReferenceProxy,
+  SwiftPackageProductDependency,
+  SwiftPackageReference,
   SyncRootGroup,
+  TargetDependency,
+  VariantGroup,
   VersionGroup,
 } from "./model/objects";
 export { RootProject, XcodeProject, type AddNativeTargetOptions } from "./model/project";

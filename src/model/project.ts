@@ -21,13 +21,20 @@ import { DEPLOYMENT_TARGET_KEY, Isa, PRODUCT_FILE_INFO, ProductType, type AppleP
 import { XcodeObject } from "./object";
 import {
   BuildConfiguration,
+  BuildFile,
   BuildPhase,
   BuildRule,
+  ConfigurationList,
   ContainerItemProxy,
+  ExceptionSet,
   FileReference,
   Group,
   ReferenceProxy,
+  SwiftPackageProductDependency,
+  SwiftPackageReference,
   SyncRootGroup,
+  TargetDependency,
+  VariantGroup,
   VersionGroup,
 } from "./objects";
 import { defaultConfigurationSettingsOf } from "./settings";
@@ -42,6 +49,8 @@ import type { RootProjectProperties } from "./properties";
  * the main group, and the project-level configurations.
  */
 export class RootProject extends XcodeObject<RootProjectProperties> {
+  static readonly isas: readonly string[] = [Isa.project];
+
   /**
    * Ids of the project's targets, in project order.
    */
@@ -55,7 +64,7 @@ export class RootProject extends XcodeObject<RootProjectProperties> {
    */
   mainGroup(): Group | undefined {
     const group = this.project.get(this.getString("mainGroup"));
-    return group instanceof Group ? group : undefined;
+    return Group.is(group) ? group : undefined;
   }
 
   /**
@@ -71,8 +80,8 @@ export class RootProject extends XcodeObject<RootProjectProperties> {
    * The views of the project's Swift package references, remote and local,
    * in declaration order.
    */
-  packageReferences(): XcodeObject[] {
-    return this.referencedViews("packageReferences");
+  packageReferences(): SwiftPackageReference[] {
+    return this.referencedViews("packageReferences").filter((view) => SwiftPackageReference.is(view));
   }
 
   /**
@@ -81,7 +90,7 @@ export class RootProject extends XcodeObject<RootProjectProperties> {
    */
   ensureProductsGroup(): Group {
     const existing = this.project.get(this.getString("productRefGroup"));
-    if (existing instanceof Group) {
+    if (Group.is(existing)) {
       return existing;
     }
 
@@ -414,14 +423,8 @@ export class XcodeProject {
   /**
    * Finds the remote Swift package reference for a repository URL.
    */
-  findSwiftPackage(repositoryUrl: string): XcodeObject | undefined {
-    for (const id of stringItems(this.rootProject.properties["packageReferences"])) {
-      const reference = this.get(id);
-      if (reference?.getString("repositoryURL") === repositoryUrl) {
-        return reference;
-      }
-    }
-    return undefined;
+  findSwiftPackage(repositoryUrl: string): SwiftPackageReference | undefined {
+    return this.rootProject.packageReferences().find((reference) => reference.repositoryURL === repositoryUrl);
   }
 
   /**
@@ -437,7 +440,7 @@ export class XcodeProject {
    *   `{ kind: "upToNextMajorVersion", minimumVersion: "5.0.0" }`.
    * @returns The view of the package reference for the repository.
    */
-  addSwiftPackage(options: { repositoryURL: string; requirement: Record<string, string> }): XcodeObject {
+  addSwiftPackage(options: { repositoryURL: string; requirement: Record<string, string> }): SwiftPackageReference {
     const existing = this.findSwiftPackage(options.repositoryURL);
     if (existing != null) {
       return existing;
@@ -448,19 +451,17 @@ export class XcodeProject {
       `${Isa.remoteSwiftPackageReference} ${options.repositoryURL}`,
     );
     ensureArray(this.rootProject.properties, "packageReferences").push(reference.id);
-    return reference;
+    // The factory maps the package-reference isas to SwiftPackageReference.
+    return reference as SwiftPackageReference;
   }
 
   /**
    * Finds the local Swift package reference for a directory path.
    */
-  findLocalSwiftPackage(relativePath: string): XcodeObject | undefined {
+  findLocalSwiftPackage(relativePath: string): SwiftPackageReference | undefined {
     return this.rootProject
       .packageReferences()
-      .find(
-        (reference) =>
-          reference.isa === Isa.localSwiftPackageReference && reference.getString("relativePath") === relativePath,
-      );
+      .find((reference) => reference.isa === Isa.localSwiftPackageReference && reference.relativePath === relativePath);
   }
 
   /**
@@ -472,7 +473,7 @@ export class XcodeProject {
    * @param relativePath The package directory, relative to the project.
    * @returns The view of the package reference for the path.
    */
-  addLocalSwiftPackage(relativePath: string): XcodeObject {
+  addLocalSwiftPackage(relativePath: string): SwiftPackageReference {
     const existing = this.findLocalSwiftPackage(relativePath);
     if (existing != null) {
       return existing;
@@ -483,7 +484,8 @@ export class XcodeProject {
       `${Isa.localSwiftPackageReference} ${relativePath}`,
     );
     ensureArray(this.rootProject.properties, "packageReferences").push(reference.id);
-    return reference;
+    // The factory maps the package-reference isas to SwiftPackageReference.
+    return reference as SwiftPackageReference;
   }
 
   /**
@@ -491,11 +493,11 @@ export class XcodeProject {
    * through `fileRef` or `productRef`. Useful for relocating a product
    * between copy phases.
    */
-  buildFilesReferencing(reference: XcodeObject): XcodeObject[] {
-    const buildFiles: XcodeObject[] = [];
+  buildFilesReferencing(reference: XcodeObject): BuildFile[] {
+    const buildFiles: BuildFile[] = [];
     for (const [, view] of this.objects()) {
       if (
-        view.isa === Isa.buildFile &&
+        BuildFile.is(view) &&
         (view.getString("fileRef") === reference.id || view.getString("productRef") === reference.id)
       ) {
         buildFiles.push(view);
@@ -702,39 +704,56 @@ export class XcodeProject {
   }
 
   /**
-   * Creates the typed view for an object, dispatching on its isa. Objects
-   * outside the typed vocabulary get the generic base view.
+   * Creates the typed view for an object, dispatching on the isa each
+   * view class declares. Unknown `PBX*BuildPhase` kinds still map to
+   * {@link BuildPhase}, and everything else outside the vocabulary gets
+   * the generic base view.
    */
   private createView(id: string, isa: string): XcodeObject {
-    switch (isa) {
-      case Isa.nativeTarget:
-        return new NativeTarget(this, id);
-      case Isa.aggregateTarget:
-        return new AggregateTarget(this, id);
-      case Isa.legacyTarget:
-        return new LegacyTarget(this, id);
-      case Isa.project:
-        return new RootProject(this, id);
-      case Isa.group:
-      case Isa.variantGroup:
-        return new Group(this, id);
-      case Isa.versionGroup:
-        return new VersionGroup(this, id);
-      case Isa.fileSystemSynchronizedRootGroup:
-        return new SyncRootGroup(this, id);
-      case Isa.buildRule:
-        return new BuildRule(this, id);
-      case Isa.buildConfiguration:
-        return new BuildConfiguration(this, id);
-      case Isa.fileReference:
-        return new FileReference(this, id);
-      case Isa.containerItemProxy:
-        return new ContainerItemProxy(this, id);
-      case Isa.referenceProxy:
-        return new ReferenceProxy(this, id);
-      default:
-        return isa.endsWith("BuildPhase") ? new BuildPhase(this, id) : new XcodeObject(this, id);
+    const View = VIEW_BY_ISA.get(isa);
+    if (View != null) {
+      return new View(this, id);
     }
+    return isa.endsWith("BuildPhase") ? new BuildPhase(this, id) : new XcodeObject(this, id);
+  }
+}
+
+/**
+ * Every concrete view class of the object model. The registry below is
+ * derived from this list, so adding a view class with its `isas` is all
+ * it takes to route objects of that kind to it.
+ */
+const VIEW_CLASSES = [
+  AggregateTarget,
+  BuildConfiguration,
+  BuildFile,
+  BuildPhase,
+  BuildRule,
+  ConfigurationList,
+  ContainerItemProxy,
+  ExceptionSet,
+  FileReference,
+  Group,
+  LegacyTarget,
+  NativeTarget,
+  ReferenceProxy,
+  RootProject,
+  SwiftPackageProductDependency,
+  SwiftPackageReference,
+  SyncRootGroup,
+  TargetDependency,
+  VariantGroup,
+  VersionGroup,
+] as const;
+
+/**
+ * View constructors by the isa they cover, built from each class's own
+ * `isas` declaration.
+ */
+const VIEW_BY_ISA = new Map<string, new (project: XcodeProject, id: string) => XcodeObject>();
+for (const viewClass of VIEW_CLASSES) {
+  for (const isa of viewClass.isas) {
+    VIEW_BY_ISA.set(isa, viewClass);
   }
 }
 

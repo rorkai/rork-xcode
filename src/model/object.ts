@@ -28,6 +28,15 @@ import type { XcodeProject } from "./project";
  * itself always reads through the narrowing accessors.
  */
 export class XcodeObject<Properties extends PbxprojObject = PbxprojObject> {
+  /**
+   * The `isa` names this view class covers. Each concrete view declares
+   * its own, and the project's view factory dispatches on them, so the
+   * class itself is the source of truth for which objects it models. The
+   * base class covers none and serves as the fallback for kinds outside
+   * the typed vocabulary.
+   */
+  static readonly isas: readonly string[] = [];
+
   /** The project this object belongs to. */
   readonly project: XcodeProject;
 

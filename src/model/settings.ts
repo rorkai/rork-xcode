@@ -5,23 +5,23 @@
  * @module
  */
 
+import { BuildConfiguration } from "./objects";
 import { asDictionary, asString, stringItems } from "./values";
 
 import type { PbxprojObject } from "../types";
-import type { XcodeObject } from "./object";
 import type { XcodeProject } from "./project";
 
 /**
  * The views of a configuration list's build configurations, in list order.
- * Dangling ids and non-dictionary entries of malformed documents are
+ * Dangling ids and objects of other kinds in malformed documents are
  * skipped.
  */
-export function configurationsOf(project: XcodeProject, configurationListId: string | undefined): XcodeObject[] {
+export function configurationsOf(project: XcodeProject, configurationListId: string | undefined): BuildConfiguration[] {
   const list = asDictionary(project.propertiesOfOptional(configurationListId));
-  const configurations: XcodeObject[] = [];
+  const configurations: BuildConfiguration[] = [];
   for (const id of stringItems(list?.["buildConfigurations"])) {
     const configuration = project.get(id);
-    if (configuration != null) {
+    if (BuildConfiguration.is(configuration)) {
       configurations.push(configuration);
     }
   }
