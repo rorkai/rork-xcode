@@ -11,11 +11,15 @@
 
 import { FILE_TYPE_BY_EXTENSION, Isa } from "./isa";
 import { XcodeObject } from "./object";
-import { ensureArray, stringItems } from "./values";
+import { asDictionary, ensureArray, stringItems } from "./values";
 
 import type {
+  BuildConfigurationProperties,
   BuildPhaseProperties,
   BuildRuleProperties,
+  BuildSettings,
+  ContainerItemProxyProperties,
+  FileReferenceProperties,
   GroupProperties,
   ReferenceProxyProperties,
   SyncRootGroupProperties,
@@ -306,6 +310,64 @@ export class VersionGroup extends Group<VersionGroupProperties> {
   setCurrentVersion(reference: XcodeObject): void {
     this.addChild(reference);
     this.properties["currentVersion"] = reference.id;
+  }
+}
+
+/**
+ * An `XCBuildConfiguration` holds one named settings dictionary of a
+ * target or of the project, for example Debug or Release.
+ */
+export class BuildConfiguration extends XcodeObject<BuildConfigurationProperties> {
+  /**
+   * The configuration's name, when present.
+   */
+  get name(): string | undefined {
+    return this.getString("name");
+  }
+
+  /**
+   * The configuration's settings dictionary, typed with the keys
+   * programmatic edits touch most, or `undefined` when the configuration
+   * carries none. The dictionary is live. Writes through it land in the
+   * document.
+   */
+  get buildSettings(): BuildSettings | undefined {
+    return asDictionary(this.properties["buildSettings"]) as BuildSettings | undefined;
+  }
+}
+
+/**
+ * A `PBXFileReference` names one file on disk, from source files to the
+ * built products themselves.
+ */
+export class FileReference extends XcodeObject<FileReferenceProperties> {
+  /**
+   * The reference's path, relative to its `sourceTree`, when present.
+   */
+  get path(): string | undefined {
+    return this.getString("path");
+  }
+
+  /**
+   * The reference's display name, when it carries one distinct from the
+   * path.
+   */
+  get name(): string | undefined {
+    return this.getString("name");
+  }
+}
+
+/**
+ * A `PBXContainerItemProxy` is the indirection Xcode places between a
+ * target dependency and the target it points at.
+ */
+export class ContainerItemProxy extends XcodeObject<ContainerItemProxyProperties> {
+  /**
+   * The display name of the object the proxy points at, when present.
+   * For target dependencies this is the target's name.
+   */
+  get remoteInfo(): string | undefined {
+    return this.getString("remoteInfo");
   }
 }
 

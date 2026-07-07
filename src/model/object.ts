@@ -3,9 +3,9 @@
  *
  * Views are lightweight, identity-mapped facades over entries of the
  * document's `objects` dictionary. All state lives in the parsed document
- * itself; a view holds only its id and a reference back to the project, so
- * document text produced from the model reflects every mutation with no
- * separate serialization step.
+ * itself, and a view holds only its id and a reference back to the
+ * project, so document text produced from the model reflects every
+ * mutation with no separate serialization step.
  *
  * @module
  */
@@ -35,7 +35,7 @@ export class XcodeObject<Properties extends PbxprojObject = PbxprojObject> {
   readonly id: string;
 
   /**
-   * Views are created by the project's identity map; use
+   * Views are created by the project's identity map. Use
    * {@link XcodeProject.get} or a typed query instead of constructing
    * views directly.
    */
@@ -45,9 +45,32 @@ export class XcodeObject<Properties extends PbxprojObject = PbxprojObject> {
   }
 
   /**
-   * The object's raw dictionary inside the document. Mutations through the
-   * model write here, and direct writes are equally valid; the model adds
-   * no caching over these properties.
+   * Whether a value is a view of this class, narrowing it when so. Views
+   * come typed out of the factory, and this is the readable way to
+   * discriminate them when iterating mixed objects.
+   *
+   * ```ts
+   * for (const [, object] of project.objects()) {
+   *   if (NativeTarget.is(object)) {
+   *     console.log(object.name);
+   *   }
+   * }
+   * ```
+   *
+   * Subclass views match their parent class too, the way `instanceof`
+   * does, so a `VersionGroup` is a `Group`.
+   */
+  static is<Constructor extends abstract new (...args: never) => unknown>(
+    this: Constructor,
+    value: unknown,
+  ): value is InstanceType<Constructor> {
+    return value instanceof this;
+  }
+
+  /**
+   * The object's raw dictionary inside the document. Mutations through
+   * the model write here, direct writes are equally valid, and the model
+   * adds no caching over these properties.
    *
    * The typed shape is asserted, not checked. It describes what a
    * well-formed object of this kind carries (see `properties.ts`).

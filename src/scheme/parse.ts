@@ -1,12 +1,13 @@
 /**
  * Parser for the `.xcscheme` XML dialect.
  *
- * Scheme files are XML with a narrow shape: elements with attributes and
- * child elements, no text content, no namespaces, no DOCTYPE. The parser
- * accepts that shape from any writer (attribute order, quoting style, and
- * whitespace vary across tools), resolves character and entity references
- * in attribute values, and preserves comments. Anything outside the shape
- * fails loudly with a position, in line with the pbxproj parser.
+ * Scheme files are XML with a narrow shape. Elements carry attributes and
+ * child elements, and there is no text content, no namespace, and no
+ * DOCTYPE. The parser accepts that shape from any writer, since attribute
+ * order, quoting style, and whitespace vary across tools. Character and
+ * entity references in attribute values resolve to their characters, and
+ * comments are preserved. Anything outside the shape fails loudly with a
+ * position, in line with the pbxproj parser.
  *
  * @module
  */
@@ -15,6 +16,7 @@ import { XcschemeParseError } from "../errors";
 
 import type { XcschemeComment, XcschemeDocument, XcschemeElement, XcschemeNode } from "./types";
 
+// UTF-16 code units of the characters the scanner dispatches on.
 const CODE_TAB = 0x09;
 const CODE_LINE_FEED = 0x0a;
 const CODE_CARRIAGE_RETURN = 0x0d;
@@ -76,19 +78,31 @@ export function parseXcscheme(text: string): XcschemeDocument {
   return new Parser(text).parseDocument();
 }
 
+/**
+ * Single-pass recursive-descent parser over the source text. One instance
+ * parses one document and is discarded.
+ */
 class Parser {
+  /** The full source text of the scheme file. */
   private readonly input: string;
+
+  /** Cursor into {@link input}, in UTF-16 code units. */
   private pos = 0;
 
   constructor(input: string) {
     this.input = input;
     // Xcode writes UTF-8 without a byte order mark, but files that passed
-    // through other editors can carry one; it is not content.
+    // through other editors can carry one, and it is not content.
     if (input.charCodeAt(0) === CODE_BOM) {
       this.pos = 1;
     }
   }
 
+  /**
+   * Parses the whole document. The XML declaration is skipped, comments
+   * around the root element are collected, and anything left after the
+   * root fails.
+   */
   parseDocument(): XcschemeDocument {
     this.skipWhitespace();
     this.skipDeclaration();
@@ -118,7 +132,8 @@ class Parser {
 
   /**
    * Skips the `<?xml ... ?>` declaration when present. Its attributes are
-   * not retained: the writer always emits the canonical UTF-8 declaration.
+   * not retained, since the writer always emits the canonical UTF-8
+   * declaration.
    */
   private skipDeclaration(): void {
     if (this.input.charCodeAt(this.pos) !== CODE_LESS_THAN || this.input.charCodeAt(this.pos + 1) !== CODE_QUESTION) {
@@ -131,6 +146,12 @@ class Parser {
     this.pos = end + 2;
   }
 
+  /**
+   * Parses one element with the cursor on its opening `<`, including its
+   * attributes and children, through to the matching close tag. Xcode
+   * never writes self-closing tags, but other generators do, so both
+   * forms are accepted.
+   */
   private parseElement(): XcschemeElement {
     if (this.input.charCodeAt(this.pos) !== CODE_LESS_THAN) {
       this.fail("Expected an element");
@@ -151,7 +172,6 @@ class Parser {
         break;
       }
       if (code === CODE_SLASH && this.input.charCodeAt(this.pos + 1) === CODE_GREATER_THAN) {
-        // Xcode never writes self-closing tags, but other generators do.
         this.pos += 2;
         return { name, attributes, children: [] };
       }
@@ -184,8 +204,8 @@ class Parser {
         this.fail(`Missing </${name}> close tag`);
       }
       if (code !== CODE_LESS_THAN) {
-        // Scheme elements never carry text content; a writer would have
-        // nowhere canonical to put it back.
+        // Scheme elements never carry text content, and a writer would
+        // have nowhere canonical to put it back.
         this.fail("Unexpected text content inside an element");
       }
 
@@ -211,6 +231,9 @@ class Parser {
     }
   }
 
+  /**
+   * Whether the cursor sits on a `<!--` comment opener.
+   */
   private peekIsCommentStart(): boolean {
     return (
       this.input.charCodeAt(this.pos) === CODE_LESS_THAN &&
@@ -220,6 +243,10 @@ class Parser {
     );
   }
 
+  /**
+   * Parses one comment with the cursor on its `<!--` opener. The text
+   * between the markers is kept verbatim.
+   */
   private parseComment(): XcschemeComment {
     const end = this.input.indexOf("-->", this.pos + 4);
     if (end === -1) {
@@ -230,6 +257,10 @@ class Parser {
     return { comment };
   }
 
+  /**
+   * Parses an XML name at the cursor. The `what` label names the
+   * expectation in the error when no name starts here.
+   */
   private parseName(what: string): string {
     const start = this.pos;
     if (!isNameStart(this.input.charCodeAt(this.pos))) {
@@ -242,6 +273,12 @@ class Parser {
     return this.input.slice(start, this.pos);
   }
 
+  /**
+   * Parses a quoted attribute value with the cursor on the opening quote,
+   * resolving character and entity references along the way. Both quote
+   * styles are accepted, and a raw `<` inside the value fails as XML
+   * requires.
+   */
   private parseAttributeValue(): string {
     const quote = this.input.charCodeAt(this.pos);
     if (quote !== CODE_QUOTE && quote !== CODE_APOSTROPHE) {
@@ -322,10 +359,17 @@ class Parser {
     return this.pos > start;
   }
 
+  /**
+   * Throws a parse error at the cursor.
+   */
   private fail(message: string): never {
     this.failAt(message, this.pos);
   }
 
+  /**
+   * Throws a parse error at an explicit offset, which reference parsing
+   * uses to point at the start of a bad reference rather than its end.
+   */
   private failAt(message: string, offset: number): never {
     throw new XcschemeParseError(message, this.input, offset);
   }

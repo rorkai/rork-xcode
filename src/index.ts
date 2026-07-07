@@ -26,12 +26,28 @@ export {
 } from "./errors";
 export { CopyFilesDestination, Isa, ProductType, type ApplePlatform } from "./model/isa";
 export { XcodeObject } from "./model/object";
-export { BuildPhase, BuildRule, Group, ReferenceProxy, SyncRootGroup, VersionGroup } from "./model/objects";
+export {
+  BuildConfiguration,
+  BuildPhase,
+  BuildRule,
+  ContainerItemProxy,
+  FileReference,
+  Group,
+  ReferenceProxy,
+  SyncRootGroup,
+  VersionGroup,
+} from "./model/objects";
 export { RootProject, XcodeProject, type AddNativeTargetOptions } from "./model/project";
 export { AggregateTarget, LegacyTarget, NativeTarget, Target } from "./model/target";
 export { parsePbxproj } from "./parse";
 export { buildXcscheme } from "./scheme/build";
-export { createXcscheme, xcschemeElements, type CreateXcschemeOptions } from "./scheme/model";
+export {
+  BuildableReference,
+  createXcscheme,
+  Xcscheme,
+  xcschemeElements,
+  type CreateXcschemeOptions,
+} from "./scheme/model";
 export { parseXcscheme } from "./scheme/parse";
 export { isXcschemeElement } from "./scheme/types";
 export { generateObjectId } from "./uuid";

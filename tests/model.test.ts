@@ -5,17 +5,21 @@ import { join } from "node:path";
 
 import {
   AggregateTarget,
+  BuildConfiguration,
   BuildPhase,
   BuildRule,
+  ContainerItemProxy,
   CopyFilesDestination,
+  FileReference,
+  Group,
   Isa,
   LegacyTarget,
+  NativeTarget,
   ProductType,
   ReferenceProxy,
   VersionGroup,
   XcodeModelError,
   XcodeProject,
-  type NativeTarget,
   type PbxprojObject,
   type SyncRootGroup,
 } from "../src/index";
@@ -743,6 +747,70 @@ describe("aggregate targets, legacy targets, and exotic references", () => {
     expect(proxy.path).toBe("libOther.a");
     expect(proxy.remoteReference()?.id).toBe(remote.id);
     expect(project.validate()).toEqual([]);
+  });
+});
+
+describe("typed views and narrowing", () => {
+  it("narrows mixed objects with the is() helper", () => {
+    const project = openApp();
+    const app = project.findMainAppTarget("ios");
+    assert(app);
+
+    expect(NativeTarget.is(app)).toBe(true);
+    expect(Group.is(app)).toBe(false);
+    expect(NativeTarget.is(undefined)).toBe(false);
+    expect(NativeTarget.is("XX0000000000000000000000")).toBe(false);
+
+    // Subclasses match their parent class, the way instanceof does.
+    const versionGroup = project.add(Isa.versionGroup, { children: [], path: "Model.xcdatamodeld" });
+    expect(VersionGroup.is(versionGroup)).toBe(true);
+    expect(Group.is(versionGroup)).toBe(true);
+
+    const kinds = { configurations: 0, fileReferences: 0, proxies: 0 };
+    for (const [, object] of project.objects()) {
+      if (BuildConfiguration.is(object)) kinds.configurations += 1;
+      if (FileReference.is(object)) kinds.fileReferences += 1;
+      if (ContainerItemProxy.is(object)) kinds.proxies += 1;
+    }
+    expect(kinds.configurations).toBeGreaterThan(0);
+    expect(kinds.fileReferences).toBeGreaterThan(0);
+  });
+
+  it("gives build configurations a typed live settings dictionary", () => {
+    const project = openApp();
+    const app = project.findMainAppTarget("ios");
+    assert(app);
+
+    const [configuration] = app.buildConfigurations();
+    assert(BuildConfiguration.is(configuration));
+    expect(configuration.name).toMatch(/Debug|Release/u);
+
+    const settings = configuration.buildSettings;
+    assert(settings);
+    expect(settings.PRODUCT_BUNDLE_IDENTIFIER).toBe("com.example.sample");
+
+    // The dictionary is live, so writes land in the built document.
+    settings.TEST_TARGET_NAME = "SampleTests";
+    expect(project.build()).toContain("TEST_TARGET_NAME = SampleTests;");
+  });
+
+  it("types file references and container proxies from the factory", () => {
+    const project = openApp();
+    const app = project.findMainAppTarget("ios");
+    assert(app);
+
+    const product = app.productReference;
+    assert(FileReference.is(product));
+    expect(product.path).toMatch(/\.app$/u);
+
+    const widget = project.addNativeTarget({ name: "Widget", productType: ProductType.appExtension });
+    app.addDependency(widget);
+    const [dependency] = app.dependencies();
+    const proxy = project.get(dependency?.getString("targetProxy"));
+    assert(ContainerItemProxy.is(proxy));
+    expect(proxy.remoteInfo).toBe("Widget");
+    proxy.properties.remoteInfo = "RenamedWidget";
+    expect(proxy.remoteInfo).toBe("RenamedWidget");
   });
 });
 

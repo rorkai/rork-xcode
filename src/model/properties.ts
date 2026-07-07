@@ -42,6 +42,8 @@ export interface BuildSettings extends PbxprojObject {
   SUPPORTED_PLATFORMS?: string;
   SWIFT_VERSION?: string;
   TARGETED_DEVICE_FAMILY?: number | string;
+  TEST_HOST?: string;
+  TEST_TARGET_NAME?: string;
   TVOS_DEPLOYMENT_TARGET?: string;
   WATCHOS_DEPLOYMENT_TARGET?: string;
   XROS_DEPLOYMENT_TARGET?: string;

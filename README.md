@@ -25,11 +25,11 @@ const text = buildPbxproj(project); // byte-stable, Xcode-canonical layout
 
 `rork-xcode` is designed for exactly that situation:
 
-- **Zero dependencies.** The pbxproj grammar is a small OpenStep-style property list dialect: dictionaries, arrays, strings, and hex data runs. A dedicated scanner covers it completely, with no general-purpose parser stack, no native addon, and no WASM blob.
+- **Zero dependencies.** The pbxproj grammar is a small OpenStep-style property list dialect of dictionaries, arrays, strings, and hex data runs. A dedicated scanner covers it completely, with no general-purpose parser stack, no native addon, and no WASM blob.
 - **One artifact, one code path.** A single ESM file with named exports. No environment-conditional entry points, no reliance on ambient globals like `Buffer`. What you test locally is what runs in production, whatever the bundler.
 - **Xcode-canonical output.** The serializer reproduces the layout Xcode itself writes (tab indentation, per-isa object sections in sorted order, single-line build-file entries, and derived reference comments like `13B07F86… /* AppDelegate.swift in Sources */`), so diffs against Xcode-saved projects stay minimal and Xcode does not rewrite the file on next save.
 - **Round-trip faithful.** Parse → build is byte-identical for Xcode-canonical documents and a fixed point for everything else. Lexical subtleties that plain number conversion would destroy (leading-zero values like `0755`, trailing-zero versions like `5.0`, digit runs longer than the double-precision safe range) are preserved as strings by design.
-- **Loud failure modes.** Malformed documents fail with a typed error carrying line and column; unrepresentable values (`null`, booleans, non-finite numbers) fail with the exact path of the offending value. Nothing is silently dropped.
+- **Loud failure modes.** Malformed documents fail with a typed error carrying line and column, and unrepresentable values (`null`, booleans, non-finite numbers) fail with the exact path of the offending value. Nothing is silently dropped.
 
 ## Install
 
@@ -222,45 +222,45 @@ for (const [id, object] of project.objects()) {
 
 ### Semantics
 
-- **Typed vocabulary, generic fallback.** The typed views cover targets of every kind, groups and variant groups, Xcode 16 synchronized folders and their exception sets, build phases and build rules, Core Data version groups, and cross-project reference proxies. Every other kind is a generic `XcodeObject` with the same read and write access, so nothing in a document is out of reach.
+- **Typed vocabulary, generic fallback.** The typed views cover targets of every kind, groups and variant groups, Xcode 16 synchronized folders and their exception sets, build phases and build rules, build configurations, file references, container item proxies, Core Data version groups, and cross-project reference proxies. Every other kind is a generic `XcodeObject` with the same read and write access, so nothing in a document is out of reach.
+- **`is()` narrowing.** Every view class carries a static type guard for discriminating mixed objects: `if (NativeTarget.is(object))` narrows the way `instanceof` does, subclasses included. Build configurations additionally expose their settings as a live typed dictionary through `configuration.buildSettings`.
 - **Typed, open property shapes.** Known keys autocomplete (`target.properties.productType`) and the shape stays open, so keys like `INFOPLIST_KEY_*` settings remain first-class. The shapes describe well-formed documents. When reading untrusted input, use the narrowing accessors, which never trust them.
-- **Two verb families.** `add*` wires something to its owner (a dependency, a package, a framework, a synchronized folder) and is idempotent: re-adding returns the existing wiring. `ensure*` returns a structural container, creating it when missing (a build phase, a group chain, the Products group). Both families can therefore run unconditionally in scaffold and repair flows.
+- **Two verb families.** `add*` wires something to its owner (a dependency, a package, a framework, a synchronized folder) and is idempotent, so re-adding returns the existing wiring. `ensure*` returns a structural container, creating it when missing (a build phase, a group chain, the Products group). Both families can therefore run unconditionally in scaffold and repair flows.
 - **Deterministic identifiers.** New objects get ids derived from what they are (`XX` + 20 digest characters + `XX`, from an embedded hash), so programmatic edits are reproducible run to run and diffs stay minimal. Collisions within a document resolve deterministically, and identical edit sequences produce byte-identical documents.
 - **Soft reads, loud writes.** Real-world projects can be malformed, so lookups return `undefined` where a document could omit something. Operations that cannot proceed without structure (no root project object, an unknown product type, a view whose object was deleted) throw `XcodeModelError`.
 - **Identity-mapped views.** Two lookups of the same id return the same instance, so views compare with `===`.
 
 ## Schemes
 
-`.xcscheme` files describe how Xcode builds, runs, tests, and archives a target. They are not property lists but a small XML dialect of their own, and `parseXcscheme` and `buildXcscheme` cover it with the same contract as the pbxproj functions: an Xcode-written scheme rebuilds byte for byte, any other input reaches Xcode's canonical layout in one build, and malformed input fails with a typed error carrying line and column.
+`.xcscheme` files describe how Xcode builds, runs, tests, and archives a target. They are not property lists but a small XML dialect of their own, and the scheme module covers it with the same contract as the pbxproj functions. An Xcode-written scheme rebuilds byte for byte, any other input reaches Xcode's canonical layout in one build, and malformed input fails with a typed error carrying line and column.
+
+`Xcscheme` is the model. Buildable references are the elements editing flows touch, and they come back as typed views:
 
 ```ts
-import { buildXcscheme, parseXcscheme, xcschemeElements } from "rork-xcode";
+import { Xcscheme } from "rork-xcode";
 
-const scheme = parseXcscheme(xcschemeText);
+const scheme = Xcscheme.parse(xcschemeText);
 
-// The tree is plain data: elements with ordered attributes and children.
-for (const reference of xcschemeElements(scheme.root, "BuildableReference")) {
-  reference.attributes["BlueprintName"] = "RenamedApp";
-  reference.attributes["BuildableName"] = "RenamedApp.app";
-  reference.attributes["ReferencedContainer"] = "container:RenamedApp.xcodeproj";
+for (const reference of scheme.buildableReferences()) {
+  reference.blueprintName = "RenamedApp";
+  reference.buildableName = "RenamedApp.app";
+  reference.referencedContainer = "container:RenamedApp.xcodeproj";
 }
 
-const text = buildXcscheme(scheme);
+const text = scheme.build();
 ```
 
-`createXcscheme` produces the scheme Xcode's own "New Scheme" action writes for an application target, wired to the target's object id from the project document:
+`Xcscheme.create` produces the scheme Xcode's own "New Scheme" action writes for an application target, wired to the target's object id from the project document:
 
 ```ts
-import { createXcscheme } from "rork-xcode";
-
-const scheme = createXcscheme({
+const scheme = Xcscheme.create({
   appName: "DemoApp",
   blueprintIdentifier: app.id,
 });
-const text = buildXcscheme(scheme);
+const text = scheme.build();
 ```
 
-Attribute order is preserved and meaningful: the writer emits attributes in insertion order, which is how byte-identical round-trips fall out. Comments are kept, attribute values resolve the character references Xcode writes (`&quot;`, `&amp;`, `&#10;` and friends), and the writer re-escapes them identically.
+Underneath, the document is a plain tree of elements with ordered attributes and children, reachable through `scheme.root` and `scheme.elements(name)`, so anything the typed surface does not cover stays one property away. `parseXcscheme` and `buildXcscheme` remain available for working with the tree directly. Attribute order is preserved and meaningful, which is how byte-identical round-trips fall out. Comments are kept, attribute values resolve the character references Xcode writes (`&quot;`, `&amp;`, `&#10;` and friends), and the writer re-escapes them identically.
 
 ## Performance
 
@@ -283,8 +283,8 @@ Measured on an Apple M5 Max, Node.js 24, single thread, with `@bacons/xcode` 1.0
 
 ### Key performance features
 
-- **Single-pass scanner.** One cursor over the input string with table-driven character classification; no tokenizer stage, no intermediate token objects.
-- **Comments skip in bulk.** Reference comments are a sizable share of a canonical document's bytes; comment bodies are jumped with `indexOf` instead of being scanned per character.
+- **Single-pass scanner.** One cursor over the input string with table-driven character classification. There is no tokenizer stage and no intermediate token objects.
+- **Comments skip in bulk.** Reference comments are a sizable share of a canonical document's bytes, so comment bodies are jumped with `indexOf` instead of being scanned per character.
 - **Linear comment derivation.** Building the `/* … */` annotations uses reverse indexes over the object graph (build file → phase, configuration list → owner), so serialization stays linear on projects with thousands of objects.
 - **Memoized rendering.** Quoting decisions for the repeated key vocabulary and rendered uuid references are cached per document, halving the quote scans on reference-heavy sections.
 
