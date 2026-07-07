@@ -53,6 +53,19 @@ interface Options {
 }
 
 /**
+ * Parses a flag value as a positive integer and rejects anything else. The
+ * sampling arithmetic divides by these values, so zero or NaN would turn
+ * the sample steps into Infinity or NaN and silently skip the checks.
+ */
+function parsePositiveInteger(flag: string, raw: string | undefined): number {
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1) {
+    throw new Error(`${flag} expects a positive integer, got ${raw}`);
+  }
+  return value;
+}
+
+/**
  * Parses the command-line flags.
  */
 function parseArgs(argv: string[]): Options {
@@ -67,10 +80,10 @@ function parseArgs(argv: string[]): Options {
         options.roots = argv[++i]!.split(",");
         break;
       case "--max":
-        options.maxFiles = Number(argv[++i]);
+        options.maxFiles = parsePositiveInteger("--max", argv[++i]);
         break;
       case "--sample":
-        options.sample = Number(argv[++i]);
+        options.sample = parsePositiveInteger("--sample", argv[++i]);
         break;
       default:
         throw new Error(`unknown flag ${argv[i]}`);
@@ -233,6 +246,9 @@ for (const path of paths) {
 // Findings are only unexpected errors and instability.
 console.log("exercising the object model on every parsed project...");
 const issueCounts = new Map<string, number>();
+const countIssue = (kind: string): void => {
+  issueCounts.set(kind, (issueCounts.get(kind) ?? 0) + 1);
+};
 let modelExercised = 0;
 let modelMutated = 0;
 const mutatedSample: string[] = [];
@@ -242,12 +258,12 @@ for (const file of parsed) {
   try {
     project = XcodeProject.fromDocument(structuredClone(file.value) as PbxprojObject);
     for (const issue of project.validate()) {
-      issueCounts.set(issue.kind, (issueCounts.get(issue.kind) ?? 0) + 1);
+      countIssue(issue.kind);
     }
     modelExercised += 1;
   } catch (error) {
     if (error instanceof XcodeModelError) {
-      issueCounts.set("model-unsupported", (issueCounts.get("model-unsupported") ?? 0) + 1);
+      countIssue("model-unsupported");
       continue;
     }
     findings.push(`${file.path}: validate threw unexpectedly, ${String(error)}`);
@@ -278,7 +294,11 @@ for (const file of parsed) {
     modelMutated += 1;
     mutatedSample.push(mutated);
   } catch (error) {
-    if (!(error instanceof XcodeModelError)) {
+    // A model error here is a project the mutation helpers cannot serve
+    // yet. That is a statistic worth seeing in the report, not a failure.
+    if (error instanceof XcodeModelError) {
+      countIssue("model-mutation-unsupported");
+    } else {
       findings.push(`${file.path}: model mutation threw unexpectedly, ${String(error)}`);
     }
   }
