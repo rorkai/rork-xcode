@@ -283,6 +283,15 @@ export class CopyFilesBuildPhase extends BuildPhase<CopyFilesBuildPhasePropertie
   get dstPath(): string | undefined {
     return this.getString("dstPath");
   }
+
+  /**
+   * The destination folder code, when present. Compare against the
+   * {@link CopyFilesDestination} constants.
+   */
+  get dstSubfolderSpec(): number | undefined {
+    const value = this.properties["dstSubfolderSpec"];
+    return typeof value === "number" ? value : undefined;
+  }
 }
 
 /**
