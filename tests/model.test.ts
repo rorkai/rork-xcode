@@ -6,10 +6,16 @@ import { join } from "node:path";
 import {
   AggregateTarget,
   BuildConfiguration,
+  BuildFile,
+  BuildFileExceptionSet,
   BuildPhase,
+  BuildPhaseMembershipExceptionSet,
   BuildRule,
+  ConfigurationList,
   ContainerItemProxy,
+  CopyFilesBuildPhase,
   CopyFilesDestination,
+  ExceptionSet,
   FileReference,
   Group,
   Isa,
@@ -17,11 +23,18 @@ import {
   NativeTarget,
   ProductType,
   ReferenceProxy,
+  RemoteSwiftPackageReference,
+  ShellScriptBuildPhase,
+  SourcesBuildPhase,
+  SwiftPackageProductDependency,
+  SwiftPackageReference,
+  TargetDependency,
   VersionGroup,
   XcodeModelError,
   XcodeProject,
   type PbxprojObject,
   type SyncRootGroup,
+  type XcodeObject,
 } from "../src/index";
 
 function fixture(name: string): string {
@@ -751,6 +764,78 @@ describe("aggregate targets, legacy targets, and exotic references", () => {
 });
 
 describe("typed views and narrowing", () => {
+  it("covers every Isa value with a view class that declares it", () => {
+    const project = XcodeProject.fromDocument({ objects: {}, rootObject: "XXROOT000000000000000000" });
+    for (const isa of Object.values(Isa)) {
+      const view = project.add(isa, {});
+      // A base XcodeObject marks a kind outside the vocabulary; every
+      // listed isa must map to a view class declaring exactly that isa.
+      expect((view.constructor as typeof XcodeObject).isa, isa).toBe(isa);
+    }
+  });
+
+  it("resolves typed relationships across the graph", () => {
+    const project = openApp();
+    const app = project.findMainAppTarget("ios");
+    assert(app);
+
+    const list = app.configurationList();
+    assert(ConfigurationList.is(list));
+    expect(list.defaultConfigurationName).toBe("Release");
+    expect(list.configurations().map((configuration) => configuration.name)).toEqual(["Debug", "Release"]);
+
+    const widget = project.addNativeTarget({ name: "Widget", productType: ProductType.appExtension });
+    const dependency = app.addDependency(widget);
+    assert(TargetDependency.is(dependency));
+    expect(dependency.target()).toBe(widget);
+    expect(dependency.targetProxy()?.remoteInfo).toBe("Widget");
+
+    const packageReference = project.addSwiftPackage({
+      repositoryURL: "https://github.com/example/demo-kit.git",
+      requirement: { kind: "upToNextMajorVersion", minimumVersion: "1.0.0" },
+    });
+    assert(RemoteSwiftPackageReference.is(packageReference));
+    expect(SwiftPackageReference.is(packageReference)).toBe(true);
+    expect(packageReference.repositoryURL).toBe("https://github.com/example/demo-kit.git");
+
+    const product = app.addSwiftPackageProduct({ productName: "DemoKit", packageReference });
+    assert(SwiftPackageProductDependency.is(product));
+    expect(product.productName).toBe("DemoKit");
+    expect(product.packageReference()).toBe(packageReference);
+
+    const [buildFile] = project.buildFilesReferencing(product);
+    assert(BuildFile.is(buildFile));
+    expect(buildFile.productDependency()).toBe(product);
+
+    const syncGroup = widget.addSyncGroup("Widget");
+    const exceptionSet = syncGroup.addMembershipExceptions(widget, ["Info.plist"]);
+    assert(BuildFileExceptionSet.is(exceptionSet));
+    expect(ExceptionSet.is(exceptionSet)).toBe(true);
+    expect(exceptionSet.membershipExceptions).toEqual(["Info.plist"]);
+    expect(exceptionSet.target()).toBe(widget);
+
+    const sources = app.ensureSourcesPhase();
+    expect(SourcesBuildPhase.is(sources)).toBe(true);
+
+    const script = app.ensureShellScriptPhase("Lint", { shellScript: "swiftlint\n" });
+    expect(ShellScriptBuildPhase.is(script)).toBe(true);
+    expect(script.shellScript).toBe("swiftlint\n");
+    expect(script.shellPath).toBe("/bin/sh");
+
+    const embedPhase = app.embed(widget);
+    assert(CopyFilesBuildPhase.is(embedPhase));
+    expect(embedPhase.dstPath).toBe("");
+
+    const membership = project.add(Isa.fileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet, {
+      buildPhase: sources.id,
+      membershipExceptions: ["Shared.swift"],
+      target: app.id,
+    });
+    assert(BuildPhaseMembershipExceptionSet.is(membership));
+    expect(membership.buildPhase()).toBe(sources);
+    project.removeObject(membership.id);
+  });
+
   it("narrows mixed objects with the is() helper", () => {
     const project = openApp();
     const app = project.findMainAppTarget("ios");

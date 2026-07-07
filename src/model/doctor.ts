@@ -46,6 +46,7 @@ const LIST_REFERENCE_PROPERTIES = [
   "buildConfigurations",
   "buildPhases",
   "buildRules",
+  "buildStyles",
   "children",
   "dependencies",
   "exceptions",

@@ -14,11 +14,25 @@
 
 import { embedDestinationFor, Isa, ProductType } from "./isa";
 import { XcodeObject } from "./object";
-import { BuildPhase, BuildRule, SyncRootGroup } from "./objects";
+import {
+  BuildPhase,
+  BuildRule,
+  ConfigurationList,
+  FileReference,
+  SwiftPackageProductDependency,
+  SyncRootGroup,
+  TargetDependency,
+  type CopyFilesBuildPhase,
+  type FrameworksBuildPhase,
+  type ResourcesBuildPhase,
+  type ShellScriptBuildPhase,
+  type SourcesBuildPhase,
+} from "./objects";
 import { configurationsOf, defaultConfigurationSettingsOf } from "./settings";
-import { asDictionary, asString, ensureArray, stringItems } from "./values";
+import { asString, ensureArray, stringItems } from "./values";
 
 import type { PbxprojObject } from "../types";
+import type { BuildConfiguration } from "./objects";
 import type { LegacyTargetProperties, NativeTargetProperties, TargetProperties } from "./properties";
 
 /**
@@ -37,17 +51,26 @@ export class Target<Properties extends TargetProperties = TargetProperties> exte
   }
 
   /**
+   * The view of the target's configuration list, when the reference
+   * resolves.
+   */
+  configurationList(): ConfigurationList | undefined {
+    const view = this.project.get(this.getString("buildConfigurationList"));
+    return ConfigurationList.is(view) ? view : undefined;
+  }
+
+  /**
    * The views of the target's build configurations, in list order.
    */
-  buildConfigurations(): XcodeObject[] {
+  buildConfigurations(): BuildConfiguration[] {
     return configurationsOf(this.project, this.getString("buildConfigurationList"));
   }
 
   /**
-   * The settings dictionary of the target's default configuration: the one
-   * named by the list's `defaultConfigurationName`, falling back to the
-   * first configuration. Returns `undefined` when the target has no
-   * configurations or the default carries no settings dictionary.
+   * The settings dictionary of the target's default configuration, which
+   * is the one named by the list's `defaultConfigurationName`, falling
+   * back to the first configuration. Returns `undefined` when the target
+   * has no configurations or the default carries no settings dictionary.
    */
   defaultConfigurationSettings(): PbxprojObject | undefined {
     return defaultConfigurationSettingsOf(this.project, this.getString("buildConfigurationList"));
@@ -77,9 +100,9 @@ export class Target<Properties extends TargetProperties = TargetProperties> exte
    */
   setBuildSetting(key: string, value: string): void {
     for (const configuration of this.buildConfigurations()) {
-      const settings = asDictionary(configuration.properties["buildSettings"]);
+      const settings = configuration.buildSettings;
       if (settings == null) {
-        configuration.properties["buildSettings"] = { [key]: value };
+        configuration.properties.buildSettings = { [key]: value };
       } else {
         settings[key] = value;
       }
@@ -91,7 +114,7 @@ export class Target<Properties extends TargetProperties = TargetProperties> exte
    */
   removeBuildSetting(key: string): void {
     for (const configuration of this.buildConfigurations()) {
-      const settings = asDictionary(configuration.properties["buildSettings"]);
+      const settings = configuration.buildSettings;
       if (settings != null) {
         delete settings[key];
       }
@@ -99,12 +122,11 @@ export class Target<Properties extends TargetProperties = TargetProperties> exte
   }
 
   /**
-   * The views of the target's dependency objects
-   * (`PBXTargetDependency`), in declaration order. Resolve a dependency's
-   * target through its `target` property.
+   * The views of the target's dependencies, in declaration order. Resolve
+   * a dependency's target through {@link TargetDependency.target}.
    */
-  dependencies(): XcodeObject[] {
-    return this.referencedViews("dependencies");
+  dependencies(): TargetDependency[] {
+    return this.referencedViews("dependencies").filter((view) => TargetDependency.is(view));
   }
 
   /**
@@ -156,8 +178,6 @@ export class Target<Properties extends TargetProperties = TargetProperties> exte
       `${isa} ${this.id} ${name ?? ""}`,
     );
     ensureArray(this.properties, "buildPhases").push(phase.id);
-    // The factory typed the view by its isa; every *BuildPhase isa maps to
-    // BuildPhase, so this cast never observes another shape.
     return phase as BuildPhase;
   }
 
@@ -169,8 +189,8 @@ export class Target<Properties extends TargetProperties = TargetProperties> exte
    * @param name Display name of the phase, which is also its match key.
    * @param properties Phase properties, most usefully `shellScript`.
    */
-  ensureShellScriptPhase(name: string, properties: PbxprojObject = {}): BuildPhase {
-    return this.ensureBuildPhase("PBXShellScriptBuildPhase", {
+  ensureShellScriptPhase(name: string, properties: PbxprojObject = {}): ShellScriptBuildPhase {
+    return this.ensureBuildPhase(Isa.shellScriptBuildPhase, {
       inputFileListPaths: [],
       inputPaths: [],
       name,
@@ -179,7 +199,7 @@ export class Target<Properties extends TargetProperties = TargetProperties> exte
       shellPath: "/bin/sh",
       shellScript: "",
       ...properties,
-    });
+    }) as ShellScriptBuildPhase;
   }
 
   /**
@@ -189,11 +209,10 @@ export class Target<Properties extends TargetProperties = TargetProperties> exte
    *
    * @returns The view of the target dependency object.
    */
-  addDependency(dependency: Target): XcodeObject {
-    for (const id of stringItems(this.properties["dependencies"])) {
-      const existing = this.project.get(id);
-      if (existing?.getString("target") === dependency.id) {
-        return existing;
+  addDependency(dependency: Target): TargetDependency {
+    for (const dependencyView of this.dependencies()) {
+      if (dependencyView.getString("target") === dependency.id) {
+        return dependencyView;
       }
     }
 
@@ -216,7 +235,7 @@ export class Target<Properties extends TargetProperties = TargetProperties> exte
       `${Isa.targetDependency} ${this.id} ${dependency.id}`,
     );
     ensureArray(this.properties, "dependencies").push(targetDependency.id);
-    return targetDependency;
+    return targetDependency as TargetDependency;
   }
 }
 
@@ -225,6 +244,8 @@ export class Target<Properties extends TargetProperties = TargetProperties> exte
  * itself, such as an application or an app extension.
  */
 export class NativeTarget extends Target<NativeTargetProperties> {
+  static readonly isa: string | null = Isa.nativeTarget;
+
   /**
    * The target's product type identifier, for example
    * `com.apple.product-type.application`.
@@ -245,9 +266,9 @@ export class NativeTarget extends Target<NativeTargetProperties> {
    * The view of the target's product file reference, when the target has
    * one.
    */
-  get productReference(): XcodeObject | undefined {
-    const id = this.getString("productReference");
-    return id == null ? undefined : this.project.get(id);
+  get productReference(): FileReference | undefined {
+    const view = this.project.get(this.getString("productReference"));
+    return FileReference.is(view) ? view : undefined;
   }
 
   /**
@@ -266,8 +287,8 @@ export class NativeTarget extends Target<NativeTargetProperties> {
    * The views of the target's Swift package product dependencies, in
    * declaration order.
    */
-  packageProductDependencies(): XcodeObject[] {
-    return this.referencedViews("packageProductDependencies");
+  packageProductDependencies(): SwiftPackageProductDependency[] {
+    return this.referencedViews("packageProductDependencies").filter((view) => SwiftPackageProductDependency.is(view));
   }
 
   /**
@@ -275,9 +296,7 @@ export class NativeTarget extends Target<NativeTargetProperties> {
    * declaration order.
    */
   syncGroups(): SyncRootGroup[] {
-    return this.referencedViews("fileSystemSynchronizedGroups").filter(
-      (view): view is SyncRootGroup => view instanceof SyncRootGroup,
-    );
+    return this.referencedViews("fileSystemSynchronizedGroups").filter((view) => SyncRootGroup.is(view));
   }
 
   /**
@@ -285,28 +304,28 @@ export class NativeTarget extends Target<NativeTargetProperties> {
    * targets without custom rules, which is nearly all of them.
    */
   buildRules(): BuildRule[] {
-    return this.referencedViews("buildRules").filter((view): view is BuildRule => view instanceof BuildRule);
+    return this.referencedViews("buildRules").filter((view) => BuildRule.is(view));
   }
 
   /**
    * The target's sources phase, created when missing.
    */
-  ensureSourcesPhase(): BuildPhase {
-    return this.ensureBuildPhase(Isa.sourcesBuildPhase);
+  ensureSourcesPhase(): SourcesBuildPhase {
+    return this.ensureBuildPhase(Isa.sourcesBuildPhase) as SourcesBuildPhase;
   }
 
   /**
    * The target's frameworks phase, created when missing.
    */
-  ensureFrameworksPhase(): BuildPhase {
-    return this.ensureBuildPhase(Isa.frameworksBuildPhase);
+  ensureFrameworksPhase(): FrameworksBuildPhase {
+    return this.ensureBuildPhase(Isa.frameworksBuildPhase) as FrameworksBuildPhase;
   }
 
   /**
    * The target's resources phase, created when missing.
    */
-  ensureResourcesPhase(): BuildPhase {
-    return this.ensureBuildPhase(Isa.resourcesBuildPhase);
+  ensureResourcesPhase(): ResourcesBuildPhase {
+    return this.ensureBuildPhase(Isa.resourcesBuildPhase) as ResourcesBuildPhase;
   }
 
   /**
@@ -322,17 +341,20 @@ export class NativeTarget extends Target<NativeTargetProperties> {
    * @returns The view of the embed phase, or `undefined` when the embedded
    *   target has no product reference to embed.
    */
-  embed(extension: NativeTarget): BuildPhase | undefined {
+  embed(extension: NativeTarget): CopyFilesBuildPhase | undefined {
     const product = extension.productReference;
     if (product == null) {
       return undefined;
     }
 
     const destination = embedDestinationFor(extension.isWatchOS() ? ProductType.watchApp : extension.productType);
-    const phase = this.ensureBuildPhase(Isa.copyFilesBuildPhase, { name: destination.phaseName });
+    const phase = this.ensureBuildPhase(Isa.copyFilesBuildPhase, {
+      name: destination.phaseName,
+    }) as CopyFilesBuildPhase;
 
-    // Destination fields are written unconditionally: a pre-existing phase
-    // with the right name but a wrong destination is repaired in passing.
+    // Destination fields are written unconditionally, so a pre-existing
+    // phase with the right name but a wrong destination is repaired in
+    // passing.
     phase.set("dstPath", destination.dstPath);
     phase.set("dstSubfolderSpec", destination.dstSubfolderSpec);
     phase.ensureBuildFile(product, { settings: { ATTRIBUTES: ["RemoveHeadersOnCopy"] } });
@@ -346,9 +368,8 @@ export class NativeTarget extends Target<NativeTargetProperties> {
    */
   syncGroupPaths(): string[] {
     const paths: string[] = [];
-    for (const id of stringItems(this.properties["fileSystemSynchronizedGroups"])) {
-      const group = this.project.get(id);
-      const path = group instanceof SyncRootGroup ? group.path : undefined;
+    for (const group of this.syncGroups()) {
+      const path = group.path;
       if (path != null) {
         paths.push(path);
       }
@@ -368,9 +389,8 @@ export class NativeTarget extends Target<NativeTargetProperties> {
    * @returns The view of the target's synchronized folder for the path.
    */
   addSyncGroup(path: string): SyncRootGroup {
-    for (const id of stringItems(this.properties["fileSystemSynchronizedGroups"])) {
-      const existing = this.project.get(id);
-      if (existing instanceof SyncRootGroup && existing.path === path) {
+    for (const existing of this.syncGroups()) {
+      if (existing.path === path) {
         return existing;
       }
     }
@@ -385,7 +405,6 @@ export class NativeTarget extends Target<NativeTargetProperties> {
     );
     ensureArray(this.properties, "fileSystemSynchronizedGroups").push(group.id);
     this.project.rootProject.mainGroup()?.addChild(group);
-    // The factory maps the sync-group isa to SyncRootGroup.
     return group as SyncRootGroup;
   }
 
@@ -402,11 +421,13 @@ export class NativeTarget extends Target<NativeTargetProperties> {
    *   {@link XcodeProject.findSwiftPackage}.
    * @returns The view of the product dependency.
    */
-  addSwiftPackageProduct(options: { productName: string; packageReference: XcodeObject }): XcodeObject {
-    for (const id of stringItems(this.properties["packageProductDependencies"])) {
-      const existing = this.project.get(id);
+  addSwiftPackageProduct(options: {
+    productName: string;
+    packageReference: XcodeObject;
+  }): SwiftPackageProductDependency {
+    for (const existing of this.packageProductDependencies()) {
       if (
-        existing?.getString("productName") === options.productName &&
+        existing.productName === options.productName &&
         existing.getString("package") === options.packageReference.id
       ) {
         return existing;
@@ -423,7 +444,7 @@ export class NativeTarget extends Target<NativeTargetProperties> {
     );
     ensureArray(this.properties, "packageProductDependencies").push(productDependency.id);
     this.ensureFrameworksPhase().ensureBuildFile(productDependency, { referenceKey: "productRef" });
-    return productDependency;
+    return productDependency as SwiftPackageProductDependency;
   }
 
   /**
@@ -435,12 +456,12 @@ export class NativeTarget extends Target<NativeTargetProperties> {
    * @param name Framework name without the `.framework` suffix.
    * @returns The view of the framework's file reference.
    */
-  addSystemFramework(name: string): XcodeObject {
+  addSystemFramework(name: string): FileReference {
     const path = `System/Library/Frameworks/${name}.framework`;
 
-    let reference: XcodeObject | undefined;
+    let reference: FileReference | undefined;
     for (const [, view] of this.project.objects()) {
-      if (view.isa === Isa.fileReference && view.getString("path") === path) {
+      if (FileReference.is(view) && view.path === path) {
         reference = view;
         break;
       }
@@ -454,7 +475,7 @@ export class NativeTarget extends Target<NativeTargetProperties> {
         sourceTree: "SDKROOT",
       },
       `${Isa.fileReference} ${path}`,
-    );
+    ) as FileReference;
 
     this.ensureFrameworksPhase().ensureBuildFile(reference);
     return reference;
@@ -466,13 +487,16 @@ export class NativeTarget extends Target<NativeTargetProperties> {
  * targets through its dependencies and to run script or copy-files
  * phases, and the shared target surface covers everything it carries.
  */
-export class AggregateTarget extends Target {}
+export class AggregateTarget extends Target {
+  static readonly isa: string | null = Isa.aggregateTarget;
+}
 
 /**
  * A legacy target shells out to an external build tool such as make
  * instead of using Xcode's build system.
  */
 export class LegacyTarget extends Target<LegacyTargetProperties> {
+  static readonly isa: string | null = Isa.legacyTarget;
   /**
    * The build tool the target invokes, as an absolute path.
    */
