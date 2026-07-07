@@ -17,7 +17,7 @@ import { XcodeModelError } from "../errors";
 import { parsePbxproj } from "../parse";
 import { generateObjectId } from "../uuid";
 import { pruneOrphanObjects, validateProject, type ProjectIssue } from "./doctor";
-import { DEPLOYMENT_TARGET_KEY, Isa, PRODUCT_FILE_INFO, ProductType, type ApplePlatform } from "./isa";
+import { DEPLOYMENT_TARGET_KEY, Isa, PRODUCT_FILE_INFO, ProductType, type ApplePlatform, type IsaValue } from "./isa";
 import { XcodeObject } from "./object";
 import {
   AppleScriptBuildPhase,
@@ -61,7 +61,7 @@ import type { RootProjectProperties } from "./properties";
  * the main group, and the project-level configurations.
  */
 export class RootProject extends XcodeObject<RootProjectProperties> {
-  static readonly isa = Isa.project;
+  static readonly isa: string | null = Isa.project;
 
   /**
    * Ids of the project's targets, in project order.
@@ -738,62 +738,59 @@ export class XcodeProject {
 }
 
 /**
- * Every concrete view class of the object model. The registry below is
- * derived from this list, so adding a view class with its `isa` is all
- * it takes to route objects of that kind to it.
+ * The view class for every isa of the vocabulary. The runtime registry
+ * and the {@link ViewByIsa} type are both derived from this one object,
+ * so the class an object routes to and the class its isa literal promises
+ * are always the same. The `satisfies` clause keeps the object covering
+ * the whole vocabulary, and the model tests check that every entry agrees
+ * with its class's own `isa` declaration.
  */
-const VIEW_CLASSES = [
-  AggregateTarget,
-  AppleScriptBuildPhase,
-  BuildConfiguration,
-  BuildFile,
-  BuildFileExceptionSet,
-  BuildPhaseMembershipExceptionSet,
-  BuildRule,
-  BuildStyle,
-  ConfigurationList,
-  ContainerItemProxy,
-  CopyFilesBuildPhase,
-  FileReference,
-  FrameworksBuildPhase,
-  Group,
-  HeadersBuildPhase,
-  LegacyTarget,
-  LocalSwiftPackageReference,
-  NativeTarget,
-  ReferenceProxy,
-  RemoteSwiftPackageReference,
-  ResourcesBuildPhase,
-  RezBuildPhase,
-  RootProject,
-  ShellScriptBuildPhase,
-  SourcesBuildPhase,
-  SwiftPackageProductDependency,
-  SyncRootGroup,
-  TargetDependency,
-  VariantGroup,
-  VersionGroup,
-] as const;
+const VIEWS = {
+  [Isa.aggregateTarget]: AggregateTarget,
+  [Isa.appleScriptBuildPhase]: AppleScriptBuildPhase,
+  [Isa.buildConfiguration]: BuildConfiguration,
+  [Isa.buildFile]: BuildFile,
+  [Isa.buildRule]: BuildRule,
+  [Isa.buildStyle]: BuildStyle,
+  [Isa.configurationList]: ConfigurationList,
+  [Isa.containerItemProxy]: ContainerItemProxy,
+  [Isa.copyFilesBuildPhase]: CopyFilesBuildPhase,
+  [Isa.fileReference]: FileReference,
+  [Isa.fileSystemSynchronizedBuildFileExceptionSet]: BuildFileExceptionSet,
+  [Isa.fileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet]: BuildPhaseMembershipExceptionSet,
+  [Isa.fileSystemSynchronizedRootGroup]: SyncRootGroup,
+  [Isa.frameworksBuildPhase]: FrameworksBuildPhase,
+  [Isa.group]: Group,
+  [Isa.headersBuildPhase]: HeadersBuildPhase,
+  [Isa.legacyTarget]: LegacyTarget,
+  [Isa.localSwiftPackageReference]: LocalSwiftPackageReference,
+  [Isa.nativeTarget]: NativeTarget,
+  [Isa.project]: RootProject,
+  [Isa.referenceProxy]: ReferenceProxy,
+  [Isa.remoteSwiftPackageReference]: RemoteSwiftPackageReference,
+  [Isa.resourcesBuildPhase]: ResourcesBuildPhase,
+  [Isa.rezBuildPhase]: RezBuildPhase,
+  [Isa.shellScriptBuildPhase]: ShellScriptBuildPhase,
+  [Isa.sourcesBuildPhase]: SourcesBuildPhase,
+  [Isa.swiftPackageProductDependency]: SwiftPackageProductDependency,
+  [Isa.targetDependency]: TargetDependency,
+  [Isa.variantGroup]: VariantGroup,
+  [Isa.versionGroup]: VersionGroup,
+} as const satisfies Record<IsaValue, new (project: XcodeProject, id: string) => XcodeObject>;
 
 /**
- * View constructors by the isa they model, built from each class's own
- * `isa` declaration.
+ * View constructors by the isa they model, in `Map` form for the factory.
  */
-const VIEW_BY_ISA = new Map<string, new (project: XcodeProject, id: string) => XcodeObject>();
-for (const viewClass of VIEW_CLASSES) {
-  VIEW_BY_ISA.set(viewClass.isa, viewClass);
-}
+const VIEW_BY_ISA = new Map<string, new (project: XcodeProject, id: string) => XcodeObject>(Object.entries(VIEWS));
 
 /**
- * The view class each isa of the vocabulary maps to, as a type. The map
- * is derived from the same {@link VIEW_CLASSES} list the runtime registry
- * is built from, keyed by each class's own `isa` declaration, so the two
- * cannot drift apart. It is what lets creation and lookup helpers return
- * the exact class for an isa literal instead of a base class the caller
- * has to cast.
+ * The view class each isa of the vocabulary maps to, as a type. Derived
+ * from the same {@link VIEWS} object the runtime registry is built from,
+ * which is what lets creation and lookup helpers return the exact class
+ * for an isa literal instead of a base class the caller has to cast.
  */
 export type ViewByIsa = {
-  [ViewClass in (typeof VIEW_CLASSES)[number] as ViewClass["isa"]]: InstanceType<ViewClass>;
+  [I in keyof typeof VIEWS]: InstanceType<(typeof VIEWS)[I]>;
 };
 
 /**

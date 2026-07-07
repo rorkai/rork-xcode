@@ -256,7 +256,7 @@ export class Target<Properties extends TargetProperties = TargetProperties> exte
  * itself, such as an application or an app extension.
  */
 export class NativeTarget extends Target<NativeTargetProperties> {
-  static readonly isa = Isa.nativeTarget;
+  static readonly isa: string | null = Isa.nativeTarget;
 
   /**
    * The target's product type identifier, for example
@@ -498,7 +498,7 @@ export class NativeTarget extends Target<NativeTargetProperties> {
  * phases, and the shared target surface covers everything it carries.
  */
 export class AggregateTarget extends Target {
-  static readonly isa = Isa.aggregateTarget;
+  static readonly isa: string | null = Isa.aggregateTarget;
 }
 
 /**
@@ -506,7 +506,7 @@ export class AggregateTarget extends Target {
  * instead of using Xcode's build system.
  */
 export class LegacyTarget extends Target<LegacyTargetProperties> {
-  static readonly isa = Isa.legacyTarget;
+  static readonly isa: string | null = Isa.legacyTarget;
   /**
    * The build tool the target invokes, as an absolute path.
    */

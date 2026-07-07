@@ -24,7 +24,14 @@ export {
   XcschemeParseError,
   type PbxprojErrorPosition,
 } from "./errors";
-export { CopyFilesDestination, Isa, ProductType, type ApplePlatform, type BuildPhaseIsa } from "./model/isa";
+export {
+  CopyFilesDestination,
+  Isa,
+  ProductType,
+  type ApplePlatform,
+  type BuildPhaseIsa,
+  type IsaValue,
+} from "./model/isa";
 export { XcodeObject } from "./model/object";
 export {
   AppleScriptBuildPhase,

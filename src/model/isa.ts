@@ -48,6 +48,12 @@ export const Isa = {
 } as const;
 
 /**
+ * One of the `isa` names of the vocabulary, the union of the values of
+ * {@link Isa}.
+ */
+export type IsaValue = (typeof Isa)[keyof typeof Isa];
+
+/**
  * The `isa` names of the build phase kinds. The phase helpers on targets
  * accept these, and the literal passed picks the phase class they return.
  */
