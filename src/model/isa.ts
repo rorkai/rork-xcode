@@ -48,6 +48,20 @@ export const Isa = {
 } as const;
 
 /**
+ * The `isa` names of the build phase kinds. The phase helpers on targets
+ * accept these, and the literal passed picks the phase class they return.
+ */
+export type BuildPhaseIsa =
+  | typeof Isa.appleScriptBuildPhase
+  | typeof Isa.copyFilesBuildPhase
+  | typeof Isa.frameworksBuildPhase
+  | typeof Isa.headersBuildPhase
+  | typeof Isa.resourcesBuildPhase
+  | typeof Isa.rezBuildPhase
+  | typeof Isa.shellScriptBuildPhase
+  | typeof Isa.sourcesBuildPhase;
+
+/**
  * Product type identifiers of the targets the model creates or reasons
  * about. Other product types pass through untouched.
  */

@@ -113,7 +113,7 @@ export class RootProject extends XcodeObject<RootProjectProperties> {
     );
     this.mainGroup()?.addChild(group);
     this.set("productRefGroup", group.id);
-    return group as Group;
+    return group;
   }
 }
 
@@ -280,7 +280,10 @@ export class XcodeProject {
   }
 
   /**
-   * Adds an object to the document and returns its view.
+   * Adds an object to the document and returns its view. When the isa is
+   * a literal of the vocabulary, the returned view is already the exact
+   * class for it: `add(Isa.fileReference, ...)` gives a `FileReference`
+   * with no cast at the call site.
    *
    * @param isa The object's kind; written as the `isa` property.
    * @param properties The object's remaining properties. The dictionary is
@@ -290,12 +293,15 @@ export class XcodeProject {
    *   is only sensible for singleton objects.
    * @returns The view of the created object.
    */
-  add(isa: string, properties: PbxprojObject, seed?: string): XcodeObject {
+  add<I extends string>(isa: I, properties: PbxprojObject, seed?: string): ViewOf<I> {
     const id = this.generateId(seed ?? isa);
     this.objectsDictionary[id] = { isa, ...properties };
     const view = this.createView(id, isa);
     this.views.set(id, view);
-    return view;
+    // The runtime registry and the ViewByIsa type are mirrors of the same
+    // class declarations, which the vocabulary test checks; the compiler
+    // cannot relate them on its own.
+    return view as ViewOf<I>;
   }
 
   /**
@@ -422,11 +428,10 @@ export class XcodeProject {
       `${Isa.nativeTarget} ${options.name}`,
     );
     ensureArray(this.rootProject.properties, "targets").push(target.id);
-    const nativeTarget = target as NativeTarget;
-    nativeTarget.ensureSourcesPhase();
-    nativeTarget.ensureFrameworksPhase();
-    nativeTarget.ensureResourcesPhase();
-    return nativeTarget;
+    target.ensureSourcesPhase();
+    target.ensureFrameworksPhase();
+    target.ensureResourcesPhase();
+    return target;
   }
 
   /**
@@ -466,7 +471,7 @@ export class XcodeProject {
       `${Isa.remoteSwiftPackageReference} ${options.repositoryURL}`,
     );
     ensureArray(this.rootProject.properties, "packageReferences").push(reference.id);
-    return reference as RemoteSwiftPackageReference;
+    return reference;
   }
 
   /**
@@ -499,7 +504,7 @@ export class XcodeProject {
       `${Isa.localSwiftPackageReference} ${relativePath}`,
     );
     ensureArray(this.rootProject.properties, "packageReferences").push(reference.id);
-    return reference as LocalSwiftPackageReference;
+    return reference;
   }
 
   /**
@@ -780,6 +785,58 @@ for (const viewClass of VIEW_CLASSES) {
     VIEW_BY_ISA.set(viewClass.isa, viewClass);
   }
 }
+
+/**
+ * The view class each isa of the vocabulary maps to, as a type. This is
+ * the type-level mirror of the registry above; it is what lets creation
+ * and lookup helpers return the exact class for an isa literal instead of
+ * a base class the caller has to cast.
+ */
+export type ViewByIsa = {
+  [Isa.aggregateTarget]: AggregateTarget;
+  [Isa.appleScriptBuildPhase]: AppleScriptBuildPhase;
+  [Isa.buildConfiguration]: BuildConfiguration;
+  [Isa.buildFile]: BuildFile;
+  [Isa.buildRule]: BuildRule;
+  [Isa.buildStyle]: BuildStyle;
+  [Isa.configurationList]: ConfigurationList;
+  [Isa.containerItemProxy]: ContainerItemProxy;
+  [Isa.copyFilesBuildPhase]: CopyFilesBuildPhase;
+  [Isa.fileReference]: FileReference;
+  [Isa.fileSystemSynchronizedBuildFileExceptionSet]: BuildFileExceptionSet;
+  [Isa.fileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet]: BuildPhaseMembershipExceptionSet;
+  [Isa.fileSystemSynchronizedRootGroup]: SyncRootGroup;
+  [Isa.frameworksBuildPhase]: FrameworksBuildPhase;
+  [Isa.group]: Group;
+  [Isa.headersBuildPhase]: HeadersBuildPhase;
+  [Isa.legacyTarget]: LegacyTarget;
+  [Isa.localSwiftPackageReference]: LocalSwiftPackageReference;
+  [Isa.nativeTarget]: NativeTarget;
+  [Isa.project]: RootProject;
+  [Isa.referenceProxy]: ReferenceProxy;
+  [Isa.remoteSwiftPackageReference]: RemoteSwiftPackageReference;
+  [Isa.resourcesBuildPhase]: ResourcesBuildPhase;
+  [Isa.rezBuildPhase]: RezBuildPhase;
+  [Isa.shellScriptBuildPhase]: ShellScriptBuildPhase;
+  [Isa.sourcesBuildPhase]: SourcesBuildPhase;
+  [Isa.swiftPackageProductDependency]: SwiftPackageProductDependency;
+  [Isa.targetDependency]: TargetDependency;
+  [Isa.variantGroup]: VariantGroup;
+  [Isa.versionGroup]: VersionGroup;
+};
+
+/**
+ * The view type an isa literal resolves to: the dedicated class for isas
+ * of the vocabulary, and the generic `XcodeObject` for anything else.
+ */
+export type ViewOf<I extends string> = I extends keyof ViewByIsa ? ViewByIsa[I] : XcodeObject;
+
+/**
+ * The build phase view an isa literal resolves to. Isas outside the
+ * vocabulary give the generic `BuildPhase`, matching the view factory's
+ * suffix fallback.
+ */
+export type BuildPhaseOf<I extends string> = I extends keyof ViewByIsa ? Extract<ViewByIsa[I], BuildPhase> : BuildPhase;
 
 /**
  * Joins two path segments with a `/`, treating an empty prefix as the

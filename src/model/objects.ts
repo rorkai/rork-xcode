@@ -102,7 +102,7 @@ export class Group<Properties extends GroupProperties = GroupProperties> extends
         `${Isa.group} ${parent.id} ${component}`,
       );
       parent.addChild(created);
-      return created as Group;
+      return created;
     }, this);
   }
 
@@ -234,7 +234,7 @@ export class BuildPhase<
       `${Isa.buildFile} ${this.id} ${reference.id}`,
     );
     this.appendBuildFile(buildFile.id);
-    return buildFile as BuildFile;
+    return buildFile;
   }
 }
 
@@ -406,7 +406,7 @@ export class SyncRootGroup extends XcodeObject<SyncRootGroupProperties> {
       `${Isa.fileSystemSynchronizedBuildFileExceptionSet} ${this.id} ${target.id}`,
     );
     ensureArray(this.properties, "exceptions").push(exceptionSet.id);
-    return exceptionSet as BuildFileExceptionSet;
+    return exceptionSet;
   }
 }
 

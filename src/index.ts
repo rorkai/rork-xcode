@@ -24,7 +24,7 @@ export {
   XcschemeParseError,
   type PbxprojErrorPosition,
 } from "./errors";
-export { CopyFilesDestination, Isa, ProductType, type ApplePlatform } from "./model/isa";
+export { CopyFilesDestination, Isa, ProductType, type ApplePlatform, type BuildPhaseIsa } from "./model/isa";
 export { XcodeObject } from "./model/object";
 export {
   AppleScriptBuildPhase,
@@ -57,7 +57,14 @@ export {
   VariantGroup,
   VersionGroup,
 } from "./model/objects";
-export { RootProject, XcodeProject, type AddNativeTargetOptions } from "./model/project";
+export {
+  RootProject,
+  XcodeProject,
+  type AddNativeTargetOptions,
+  type BuildPhaseOf,
+  type ViewByIsa,
+  type ViewOf,
+} from "./model/project";
 export { AggregateTarget, LegacyTarget, NativeTarget, Target } from "./model/target";
 export { parsePbxproj } from "./parse";
 export { buildXcscheme } from "./scheme/build";
