@@ -118,35 +118,36 @@ export interface EmbedDestination {
  * know build settings should check the deployment-target key instead.
  */
 export function embedDestinationFor(productType: string | undefined): EmbedDestination {
-  if (productType === ProductType.onDemandInstallCapableApplication) {
-    return {
-      phaseName: "Embed App Clips",
-      dstSubfolderSpec: CopyFilesDestination.productsDirectory,
-      dstPath: "$(CONTENTS_FOLDER_PATH)/AppClips",
-    };
-  }
-  if (productType === ProductType.watchApp || productType === ProductType.application) {
+  switch (productType) {
+    case ProductType.onDemandInstallCapableApplication:
+      return {
+        phaseName: "Embed App Clips",
+        dstSubfolderSpec: CopyFilesDestination.productsDirectory,
+        dstPath: "$(CONTENTS_FOLDER_PATH)/AppClips",
+      };
     // Watch applications embed as full products under Watch; a plain
     // application only reaches here from watch pairings, where the same
     // destination applies.
-    return {
-      phaseName: "Embed Watch Content",
-      dstSubfolderSpec: CopyFilesDestination.productsDirectory,
-      dstPath: "$(CONTENTS_FOLDER_PATH)/Watch",
-    };
+    case ProductType.watchApp:
+    case ProductType.application:
+      return {
+        phaseName: "Embed Watch Content",
+        dstSubfolderSpec: CopyFilesDestination.productsDirectory,
+        dstPath: "$(CONTENTS_FOLDER_PATH)/Watch",
+      };
+    case ProductType.extensionKitExtension:
+      return {
+        phaseName: "Embed ExtensionKit Extensions",
+        dstSubfolderSpec: CopyFilesDestination.productsDirectory,
+        dstPath: "$(EXTENSIONS_FOLDER_PATH)",
+      };
+    default:
+      return {
+        phaseName: "Embed Foundation Extensions",
+        dstSubfolderSpec: CopyFilesDestination.plugins,
+        dstPath: "",
+      };
   }
-  if (productType === ProductType.extensionKitExtension) {
-    return {
-      phaseName: "Embed ExtensionKit Extensions",
-      dstSubfolderSpec: CopyFilesDestination.productsDirectory,
-      dstPath: "$(EXTENSIONS_FOLDER_PATH)",
-    };
-  }
-  return {
-    phaseName: "Embed Foundation Extensions",
-    dstSubfolderSpec: CopyFilesDestination.plugins,
-    dstPath: "",
-  };
 }
 
 /**

@@ -696,37 +696,29 @@ export class XcodeProject {
    * outside the typed vocabulary get the generic base view.
    */
   private createView(id: string, isa: string): XcodeObject {
-    if (isa === Isa.nativeTarget) {
-      return new NativeTarget(this, id);
+    switch (isa) {
+      case Isa.nativeTarget:
+        return new NativeTarget(this, id);
+      case Isa.aggregateTarget:
+        return new AggregateTarget(this, id);
+      case Isa.legacyTarget:
+        return new LegacyTarget(this, id);
+      case Isa.project:
+        return new RootProject(this, id);
+      case Isa.group:
+      case Isa.variantGroup:
+        return new Group(this, id);
+      case Isa.versionGroup:
+        return new VersionGroup(this, id);
+      case Isa.fileSystemSynchronizedRootGroup:
+        return new SyncRootGroup(this, id);
+      case Isa.buildRule:
+        return new BuildRule(this, id);
+      case Isa.referenceProxy:
+        return new ReferenceProxy(this, id);
+      default:
+        return isa.endsWith("BuildPhase") ? new BuildPhase(this, id) : new XcodeObject(this, id);
     }
-    if (isa === Isa.aggregateTarget) {
-      return new AggregateTarget(this, id);
-    }
-    if (isa === Isa.legacyTarget) {
-      return new LegacyTarget(this, id);
-    }
-    if (isa === Isa.project) {
-      return new RootProject(this, id);
-    }
-    if (isa === Isa.group || isa === Isa.variantGroup) {
-      return new Group(this, id);
-    }
-    if (isa === Isa.versionGroup) {
-      return new VersionGroup(this, id);
-    }
-    if (isa === Isa.fileSystemSynchronizedRootGroup) {
-      return new SyncRootGroup(this, id);
-    }
-    if (isa === Isa.buildRule) {
-      return new BuildRule(this, id);
-    }
-    if (isa === Isa.referenceProxy) {
-      return new ReferenceProxy(this, id);
-    }
-    if (isa.endsWith("BuildPhase")) {
-      return new BuildPhase(this, id);
-    }
-    return new XcodeObject(this, id);
   }
 }
 
