@@ -241,9 +241,12 @@ import { Xcscheme } from "rork-xcode";
 
 const scheme = Xcscheme.parse(xcschemeText);
 
+// Rename the app while keeping each product's own shape, so a testable
+// like DemoAppTests.xctest stays a test bundle.
 for (const reference of scheme.buildableReferences()) {
-  reference.blueprintName = "RenamedApp";
-  reference.buildableName = "RenamedApp.app";
+  const { blueprintName, buildableName } = reference;
+  if (blueprintName) reference.blueprintName = blueprintName.replace("DemoApp", "RenamedApp");
+  if (buildableName) reference.buildableName = buildableName.replace("DemoApp", "RenamedApp");
   reference.referencedContainer = "container:RenamedApp.xcodeproj";
 }
 
