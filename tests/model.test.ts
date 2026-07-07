@@ -316,8 +316,30 @@ describe("scaffolding an extension target", () => {
     const phase = host.embed(watchApp);
     assert(phase);
     expect(phase.name).toBe("Embed Watch Content");
-    expect(phase.properties["dstSubfolderSpec"]).toBe(CopyFilesDestination.productsDirectory);
-    expect(phase.properties["dstPath"]).toBe("$(CONTENTS_FOLDER_PATH)/Watch");
+    expect(phase.dstSubfolderSpec).toBe(CopyFilesDestination.productsDirectory);
+    expect(phase.dstPath).toBe("$(CONTENTS_FOLDER_PATH)/Watch");
+  });
+
+  it("reads embedded targets back through the copy-files phases", () => {
+    const project = openApp();
+    const host = project.findMainAppTarget("ios");
+    assert(host);
+    expect(host.embeddedTargets()).toEqual([]);
+
+    const widget = project.addNativeTarget({ name: "DemoWidget", productType: ProductType.appExtension });
+    const clip = project.addNativeTarget({
+      name: "DemoClip",
+      productType: ProductType.onDemandInstallCapableApplication,
+    });
+    host.embed(widget);
+    host.embed(clip);
+    // Embedding twice must not duplicate the target in the read-back.
+    host.embed(widget);
+
+    // Phase order is creation order, so the widget's embed phase walks first.
+    expect(host.embeddedTargets()).toEqual([widget, clip]);
+    expect(widget.embeddedTargets()).toEqual([]);
+    expect(project.validate()).toEqual([]);
   });
 });
 

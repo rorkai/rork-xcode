@@ -15,14 +15,15 @@
 import { embedDestinationFor, Isa, ProductType } from "./isa";
 import { XcodeObject } from "./object";
 import {
+  BuildFile,
   BuildPhase,
   BuildRule,
   ConfigurationList,
+  CopyFilesBuildPhase,
   FileReference,
   SwiftPackageProductDependency,
   SyncRootGroup,
   TargetDependency,
-  type CopyFilesBuildPhase,
   type FrameworksBuildPhase,
   type ResourcesBuildPhase,
   type ShellScriptBuildPhase,
@@ -369,6 +370,42 @@ export class NativeTarget extends Target<NativeTargetProperties> {
     phase.set("dstSubfolderSpec", destination.dstSubfolderSpec);
     phase.ensureBuildFile(product, { settings: { ATTRIBUTES: ["RemoveHeadersOnCopy"] } });
     return phase;
+  }
+
+  /**
+   * The targets whose products this target's copy-files phases carry,
+   * in phase and file order. This is the read-side counterpart of
+   * {@link embed}: extensions, watch apps, and App Clips embedded here
+   * come back as their target views. Targets embedding further targets
+   * of their own can be walked recursively through this accessor.
+   */
+  embeddedTargets(): NativeTarget[] {
+    const ownersByProductId = new Map<string, NativeTarget>();
+    for (const candidate of this.project.nativeTargets()) {
+      const product = candidate.productReference;
+      if (product != null) {
+        ownersByProductId.set(product.id, candidate);
+      }
+    }
+
+    const embedded: NativeTarget[] = [];
+    for (const phase of this.buildPhases()) {
+      if (!CopyFilesBuildPhase.is(phase)) {
+        continue;
+      }
+      for (const buildFileId of phase.buildFileIds) {
+        const buildFile = this.project.get(buildFileId);
+        if (!BuildFile.is(buildFile)) {
+          continue;
+        }
+        const reference = buildFile.fileReference();
+        const owner = reference == null ? undefined : ownersByProductId.get(reference.id);
+        if (owner != null && owner !== this && !embedded.includes(owner)) {
+          embedded.push(owner);
+        }
+      }
+    }
+    return embedded;
   }
 
   /**
