@@ -19,9 +19,33 @@ export { buildPbxproj } from "./build";
 export { PbxprojBuildError, PbxprojParseError, XcodeModelError, type PbxprojErrorPosition } from "./errors";
 export { CopyFilesDestination, Isa, ProductType, type ApplePlatform } from "./model/isa";
 export { XcodeObject } from "./model/object";
-export { BuildPhase, Group, SyncRootGroup } from "./model/objects";
+export { BuildPhase, BuildRule, Group, ReferenceProxy, SyncRootGroup, VersionGroup } from "./model/objects";
 export { RootProject, XcodeProject, type AddNativeTargetOptions } from "./model/project";
-export { NativeTarget } from "./model/target";
+export { AggregateTarget, LegacyTarget, NativeTarget, Target } from "./model/target";
 export { parsePbxproj } from "./parse";
-export type { PbxprojArray, PbxprojObject, PbxprojValue } from "./types";
 export { generateObjectId } from "./uuid";
+
+export type { ProjectIssue, ProjectIssueKind } from "./model/doctor";
+export type {
+  BuildConfigurationProperties,
+  BuildFileProperties,
+  BuildPhaseProperties,
+  BuildRuleProperties,
+  BuildSettings,
+  ConfigurationListProperties,
+  ContainerItemProxyProperties,
+  ExceptionSetProperties,
+  FileReferenceProperties,
+  GroupProperties,
+  LegacyTargetProperties,
+  NativeTargetProperties,
+  ReferenceProxyProperties,
+  RootProjectProperties,
+  SwiftPackageProductDependencyProperties,
+  SwiftPackageReferenceProperties,
+  SyncRootGroupProperties,
+  TargetDependencyProperties,
+  TargetProperties,
+  VersionGroupProperties,
+} from "./model/properties";
+export type { PbxprojArray, PbxprojObject, PbxprojValue } from "./types";

@@ -1,6 +1,6 @@
 /**
- * Typed views over the document object kinds that are not targets: groups,
- * build phases, and file-system-synchronized groups.
+ * Typed views over the document object kinds that are not targets, from
+ * groups and build phases to version groups and reference proxies.
  *
  * Each class adds the accessors and mutations its kind supports; everything
  * ultimately reads and writes the raw dictionaries through the base class,
@@ -11,14 +11,25 @@
 
 import { FILE_TYPE_BY_EXTENSION, Isa } from "./isa";
 import { XcodeObject } from "./object";
-import type { NativeTarget } from "./target";
 import { ensureArray, stringItems } from "./values";
 
+import type {
+  BuildPhaseProperties,
+  BuildRuleProperties,
+  GroupProperties,
+  ReferenceProxyProperties,
+  SyncRootGroupProperties,
+  VersionGroupProperties,
+} from "./properties";
+import type { NativeTarget } from "./target";
+
 /**
- * A `PBXGroup`: a folder in Xcode's navigator holding references to files
- * and other groups.
+ * A `PBXGroup` is a folder in Xcode's navigator, holding references to
+ * files and other groups. Variant groups (`PBXVariantGroup`) share this
+ * view. The type parameter lets subclasses carry a more specific property
+ * shape.
  */
-export class Group extends XcodeObject {
+export class Group<Properties extends GroupProperties = GroupProperties> extends XcodeObject<Properties> {
   /**
    * Ids of the group's children, in navigator order. Non-string entries of
    * a malformed document are skipped.
@@ -111,10 +122,10 @@ export class Group extends XcodeObject {
 }
 
 /**
- * Any `PBX*BuildPhase`: an ordered list of build files processed by one
- * step of a target's build.
+ * A build phase is an ordered list of build files processed by one step
+ * of a target's build. Every `PBX*BuildPhase` kind shares this view.
  */
-export class BuildPhase extends XcodeObject {
+export class BuildPhase extends XcodeObject<BuildPhaseProperties> {
   /**
    * The phase's display name, when it carries an explicit one. Xcode names
    * copy-files and shell-script phases; the standard phases derive their
@@ -200,10 +211,10 @@ export class BuildPhase extends XcodeObject {
 }
 
 /**
- * A `PBXFileSystemSynchronizedRootGroup`: an Xcode 16 folder whose members
- * are synchronized from disk instead of listed individually.
+ * A `PBXFileSystemSynchronizedRootGroup` is an Xcode 16 folder whose
+ * members are synchronized from disk instead of listed individually.
  */
-export class SyncRootGroup extends XcodeObject {
+export class SyncRootGroup extends XcodeObject<SyncRootGroupProperties> {
   /**
    * The group's on-disk folder path, when present.
    */
@@ -256,5 +267,67 @@ export class SyncRootGroup extends XcodeObject {
     );
     ensureArray(this.properties, "exceptions").push(exceptionSet.id);
     return exceptionSet;
+  }
+}
+
+/**
+ * A `PBXBuildRule` tells a target which compiler or script processes a
+ * kind of file.
+ */
+export class BuildRule extends XcodeObject<BuildRuleProperties> {
+  /**
+   * The rule's script, when it is a script rule rather than a reference
+   * to a compiler specification.
+   */
+  get script(): string | undefined {
+    return this.getString("script");
+  }
+}
+
+/**
+ * An `XCVersionGroup` contains a versioned Core Data model
+ * (`.xcdatamodeld`). Its children are the model versions and
+ * `currentVersion` names the active one.
+ */
+export class VersionGroup extends Group<VersionGroupProperties> {
+  /**
+   * The view of the active model version's file reference, when the group
+   * names one.
+   */
+  currentVersion(): XcodeObject | undefined {
+    const id = this.getString("currentVersion");
+    return id == null ? undefined : this.project.get(id);
+  }
+
+  /**
+   * Makes a model version the active one, adding it to the group's
+   * children when it is not listed yet.
+   */
+  setCurrentVersion(reference: XcodeObject): void {
+    this.addChild(reference);
+    this.properties["currentVersion"] = reference.id;
+  }
+}
+
+/**
+ * A `PBXReferenceProxy` stands in for a product built by a target of
+ * another project referenced from this one.
+ */
+export class ReferenceProxy extends XcodeObject<ReferenceProxyProperties> {
+  /**
+   * The proxy's product path inside the other project's build directory,
+   * when present.
+   */
+  get path(): string | undefined {
+    return this.getString("path");
+  }
+
+  /**
+   * The view of the container item proxy that names the remote target,
+   * when the reference resolves.
+   */
+  remoteReference(): XcodeObject | undefined {
+    const id = this.getString("remoteRef");
+    return id == null ? undefined : this.project.get(id);
   }
 }

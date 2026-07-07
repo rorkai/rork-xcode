@@ -14,7 +14,9 @@
  * gives typed access to.
  */
 export const Isa = {
+  aggregateTarget: "PBXAggregateTarget",
   buildFile: "PBXBuildFile",
+  buildRule: "PBXBuildRule",
   containerItemProxy: "PBXContainerItemProxy",
   copyFilesBuildPhase: "PBXCopyFilesBuildPhase",
   fileReference: "PBXFileReference",
@@ -22,16 +24,20 @@ export const Isa = {
   fileSystemSynchronizedRootGroup: "PBXFileSystemSynchronizedRootGroup",
   frameworksBuildPhase: "PBXFrameworksBuildPhase",
   group: "PBXGroup",
+  legacyTarget: "PBXLegacyTarget",
   nativeTarget: "PBXNativeTarget",
   project: "PBXProject",
+  referenceProxy: "PBXReferenceProxy",
   resourcesBuildPhase: "PBXResourcesBuildPhase",
   sourcesBuildPhase: "PBXSourcesBuildPhase",
   targetDependency: "PBXTargetDependency",
+  variantGroup: "PBXVariantGroup",
   buildConfiguration: "XCBuildConfiguration",
   configurationList: "XCConfigurationList",
   localSwiftPackageReference: "XCLocalSwiftPackageReference",
   remoteSwiftPackageReference: "XCRemoteSwiftPackageReference",
   swiftPackageProductDependency: "XCSwiftPackageProductDependency",
+  versionGroup: "XCVersionGroup",
 } as const;
 
 /**
@@ -49,8 +55,9 @@ export const ProductType = {
 } as const;
 
 /**
- * How a product type's build product appears on disk: the wrapper file
- * extension and the `explicitFileType` of its product file reference.
+ * How a product type's build product appears on disk. Each entry carries
+ * the wrapper file extension and the `explicitFileType` of the product
+ * file reference.
  */
 export const PRODUCT_FILE_INFO: Readonly<Record<string, { extension: string; fileType: string }>> = {
   [ProductType.application]: { extension: ".app", fileType: "wrapper.application" },
@@ -111,35 +118,36 @@ export interface EmbedDestination {
  * know build settings should check the deployment-target key instead.
  */
 export function embedDestinationFor(productType: string | undefined): EmbedDestination {
-  if (productType === ProductType.onDemandInstallCapableApplication) {
-    return {
-      phaseName: "Embed App Clips",
-      dstSubfolderSpec: CopyFilesDestination.productsDirectory,
-      dstPath: "$(CONTENTS_FOLDER_PATH)/AppClips",
-    };
-  }
-  if (productType === ProductType.watchApp || productType === ProductType.application) {
+  switch (productType) {
+    case ProductType.onDemandInstallCapableApplication:
+      return {
+        phaseName: "Embed App Clips",
+        dstSubfolderSpec: CopyFilesDestination.productsDirectory,
+        dstPath: "$(CONTENTS_FOLDER_PATH)/AppClips",
+      };
     // Watch applications embed as full products under Watch; a plain
     // application only reaches here from watch pairings, where the same
     // destination applies.
-    return {
-      phaseName: "Embed Watch Content",
-      dstSubfolderSpec: CopyFilesDestination.productsDirectory,
-      dstPath: "$(CONTENTS_FOLDER_PATH)/Watch",
-    };
+    case ProductType.watchApp:
+    case ProductType.application:
+      return {
+        phaseName: "Embed Watch Content",
+        dstSubfolderSpec: CopyFilesDestination.productsDirectory,
+        dstPath: "$(CONTENTS_FOLDER_PATH)/Watch",
+      };
+    case ProductType.extensionKitExtension:
+      return {
+        phaseName: "Embed ExtensionKit Extensions",
+        dstSubfolderSpec: CopyFilesDestination.productsDirectory,
+        dstPath: "$(EXTENSIONS_FOLDER_PATH)",
+      };
+    default:
+      return {
+        phaseName: "Embed Foundation Extensions",
+        dstSubfolderSpec: CopyFilesDestination.plugins,
+        dstPath: "",
+      };
   }
-  if (productType === ProductType.extensionKitExtension) {
-    return {
-      phaseName: "Embed ExtensionKit Extensions",
-      dstSubfolderSpec: CopyFilesDestination.productsDirectory,
-      dstPath: "$(EXTENSIONS_FOLDER_PATH)",
-    };
-  }
-  return {
-    phaseName: "Embed Foundation Extensions",
-    dstSubfolderSpec: CopyFilesDestination.plugins,
-    dstPath: "",
-  };
 }
 
 /**

@@ -11,6 +11,7 @@
 
 import { PbxprojParseError } from "./errors";
 import { isHexDigit, unescapeString } from "./escape";
+
 import type { PbxprojObject, PbxprojValue } from "./types";
 
 /**

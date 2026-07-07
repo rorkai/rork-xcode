@@ -7,7 +7,7 @@
   "singleQuote": false,
   "bracketSpacing": true,
   "bracketSameLine": false,
-  "experimentalSortImports": {
-    "groups": ["builtin", "external", "internal", ["parent", "sibling", "index"]]
+  "sortImports": {
+    "groups": ["builtin", "external", "internal", ["parent", "sibling", "index"], "type"]
   }
 }

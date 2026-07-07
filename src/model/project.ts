@@ -1,5 +1,5 @@
 /**
- * The project document model: typed, mutable access to a parsed
+ * The project document model. It gives typed, mutable access to a parsed
  * `project.pbxproj`.
  *
  * The model is a set of lightweight views over the plain parsed document.
@@ -15,20 +15,23 @@
 import { buildPbxproj } from "../build";
 import { XcodeModelError } from "../errors";
 import { parsePbxproj } from "../parse";
-import type { PbxprojObject, PbxprojValue } from "../types";
 import { generateObjectId } from "../uuid";
+import { pruneOrphanObjects, validateProject, type ProjectIssue } from "./doctor";
 import { DEPLOYMENT_TARGET_KEY, Isa, PRODUCT_FILE_INFO, ProductType, type ApplePlatform } from "./isa";
 import { XcodeObject } from "./object";
-import { BuildPhase, Group, SyncRootGroup } from "./objects";
+import { BuildPhase, BuildRule, Group, ReferenceProxy, SyncRootGroup, VersionGroup } from "./objects";
 import { defaultConfigurationSettingsOf } from "./settings";
-import { NativeTarget } from "./target";
+import { AggregateTarget, LegacyTarget, NativeTarget, Target } from "./target";
 import { asDictionary, asString, ensureArray, stringItems } from "./values";
 
+import type { PbxprojObject, PbxprojValue } from "../types";
+import type { RootProjectProperties } from "./properties";
+
 /**
- * The `PBXProject` object at the document root: the container that owns
- * the target list, the main group, and project-level configurations.
+ * The `PBXProject` object at the document root. It owns the target list,
+ * the main group, and the project-level configurations.
  */
-export class RootProject extends XcodeObject {
+export class RootProject extends XcodeObject<RootProjectProperties> {
   /**
    * Ids of the project's targets, in project order.
    */
@@ -135,7 +138,7 @@ export class XcodeProject {
   private readonly objectsDictionary: PbxprojObject;
 
   /**
-   * Identity map of object views: one view per id, created on first
+   * Identity map of object views, one view per id, created on first
    * access, so views of the same object compare with `===`.
    */
   private readonly views = new Map<string, XcodeObject>();
@@ -280,18 +283,26 @@ export class XcodeProject {
   }
 
   /**
-   * The views of the project's native targets, in project order. Targets
-   * of other kinds (aggregate and legacy targets) are not included.
+   * The views of the project's targets of every kind (native, aggregate,
+   * and legacy), in project order.
    */
-  nativeTargets(): NativeTarget[] {
-    const targets: NativeTarget[] = [];
+  targets(): Target[] {
+    const targets: Target[] = [];
     for (const id of this.rootProject.targetIds()) {
       const view = this.get(id);
-      if (view instanceof NativeTarget) {
+      if (view instanceof Target) {
         targets.push(view);
       }
     }
     return targets;
+  }
+
+  /**
+   * The views of the project's native targets, in project order. Targets
+   * of other kinds (aggregate and legacy targets) are not included.
+   */
+  nativeTargets(): NativeTarget[] {
+    return this.targets().filter((target): target is NativeTarget => target instanceof NativeTarget);
   }
 
   /**
@@ -302,7 +313,7 @@ export class XcodeProject {
   }
 
   /**
-   * Finds the main application target for a platform: prefers the
+   * Finds the main application target for a platform. It prefers the
    * application target whose own configurations carry the platform's
    * deployment-target key, and falls back to the first application target
    * in project order. Returns `undefined` when the project has no
@@ -484,9 +495,29 @@ export class XcodeProject {
   }
 
   /**
+   * Validates the document's object graph and returns every problem
+   * found. An empty array means the graph is structurally sound. The
+   * checks cover the root object, object kinds, known references, and
+   * reachability.
+   */
+  validate(): ProjectIssue[] {
+    return validateProject(this);
+  }
+
+  /**
+   * Removes every object unreachable from the root object and returns the
+   * removed ids. Reachability is conservative. Any real reference keeps
+   * an object alive, even through properties outside the known schema.
+   */
+  pruneOrphans(): string[] {
+    return pruneOrphanObjects(this);
+  }
+
+  /**
    * The views of every object that references the id anywhere in its
-   * properties: a string property naming it, an id list containing it, or
-   * a nested dictionary carrying it as a key or string value.
+   * properties. A reference is a string property naming the id, an id
+   * list containing it, or a nested dictionary carrying it as a key or
+   * string value.
    *
    * The scan is linear over the document; removal flows call it once per
    * removed object, which keeps teardown proportional to what is actually
@@ -504,7 +535,7 @@ export class XcodeProject {
 
   /**
    * Removes an object from the document and strips every reference to it
-   * from the remaining objects: string properties naming the id are
+   * from the remaining objects. String properties naming the id are
    * deleted, id lists drop it, and nested dictionaries keyed by object id
    * (such as `TargetAttributes`) drop its entry.
    *
@@ -524,13 +555,13 @@ export class XcodeProject {
   }
 
   /**
-   * Removes a target and everything that exists only for its sake: its
-   * build phases and their build files, its configuration list and
-   * configurations, its product reference and the build files embedding
-   * it, dependency objects and container proxies in both directions
-   * (other targets' dependencies on it, and its own dependencies on
-   * others), its membership exception sets, and synchronized folders no
-   * remaining target links.
+   * Removes a target and everything that exists only for its sake. That
+   * covers its build phases and their build files, its configuration list
+   * and configurations, its product reference and the build files
+   * embedding it, dependency objects and container proxies in both
+   * directions (other targets' dependencies on it, and its own
+   * dependencies on others), its membership exception sets, and
+   * synchronized folders no remaining target links.
    *
    * On-disk sources are untouched; the removal is document-only, like
    * deleting a target in Xcode and keeping its folder.
@@ -539,7 +570,7 @@ export class XcodeProject {
    *   since removing by another document's ids would tear down unrelated
    *   objects that happen to share them.
    */
-  removeTarget(target: NativeTarget): void {
+  removeTarget(target: Target): void {
     if (target.project !== this) {
       throw new XcodeModelError("Cannot remove a target that belongs to another project");
     }
@@ -561,7 +592,7 @@ export class XcodeProject {
       ownedIds.add(configurationListId);
     }
 
-    const product = target.productReference;
+    const product = this.get(target.getString("productReference"));
     if (product != null) {
       for (const buildFile of this.buildFilesReferencing(product)) {
         ownedIds.add(buildFile.id);
@@ -665,22 +696,29 @@ export class XcodeProject {
    * outside the typed vocabulary get the generic base view.
    */
   private createView(id: string, isa: string): XcodeObject {
-    if (isa === Isa.nativeTarget) {
-      return new NativeTarget(this, id);
+    switch (isa) {
+      case Isa.nativeTarget:
+        return new NativeTarget(this, id);
+      case Isa.aggregateTarget:
+        return new AggregateTarget(this, id);
+      case Isa.legacyTarget:
+        return new LegacyTarget(this, id);
+      case Isa.project:
+        return new RootProject(this, id);
+      case Isa.group:
+      case Isa.variantGroup:
+        return new Group(this, id);
+      case Isa.versionGroup:
+        return new VersionGroup(this, id);
+      case Isa.fileSystemSynchronizedRootGroup:
+        return new SyncRootGroup(this, id);
+      case Isa.buildRule:
+        return new BuildRule(this, id);
+      case Isa.referenceProxy:
+        return new ReferenceProxy(this, id);
+      default:
+        return isa.endsWith("BuildPhase") ? new BuildPhase(this, id) : new XcodeObject(this, id);
     }
-    if (isa === Isa.project) {
-      return new RootProject(this, id);
-    }
-    if (isa === Isa.group || isa === "PBXVariantGroup") {
-      return new Group(this, id);
-    }
-    if (isa === Isa.fileSystemSynchronizedRootGroup) {
-      return new SyncRootGroup(this, id);
-    }
-    if (isa.endsWith("BuildPhase")) {
-      return new BuildPhase(this, id);
-    }
-    return new XcodeObject(this, id);
   }
 }
 
@@ -693,9 +731,9 @@ function joinPath(prefix: string, segment: string): string {
 }
 
 /**
- * Whether a value references the id anywhere in its structure: a string
- * equal to it, an array containing it at any depth, or a dictionary
- * carrying it as a key or somewhere in its values.
+ * Whether a value references the id anywhere in its structure. A
+ * reference is a string equal to it, an array containing it at any depth,
+ * or a dictionary carrying it as a key or somewhere in its values.
  */
 function valueReferences(value: PbxprojValue | undefined, id: string): boolean {
   if (typeof value === "string") {
@@ -712,7 +750,7 @@ function valueReferences(value: PbxprojValue | undefined, id: string): boolean {
 }
 
 /**
- * Whether an object's properties reference the id anywhere; see
+ * Whether an object's properties reference the id anywhere. See
  * {@link valueReferences} for the shapes considered.
  */
 function objectReferences(properties: PbxprojObject, id: string): boolean {
@@ -725,10 +763,10 @@ function objectReferences(properties: PbxprojObject, id: string): boolean {
 }
 
 /**
- * Strips every reference to the id inside a value and returns the value to
- * keep: strings equal to the id become `undefined`, arrays drop matching
- * items at any depth, and dictionaries drop entries keyed by it and
- * recurse into their values.
+ * Strips every reference to the id inside a value and returns the value
+ * to keep. Strings equal to the id become `undefined`, arrays drop
+ * matching items at any depth, and dictionaries drop entries keyed by it
+ * and recurse into their values.
  */
 function stripValue(value: PbxprojValue, id: string): PbxprojValue | undefined {
   if (typeof value === "string") {

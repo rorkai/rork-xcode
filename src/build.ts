@@ -22,6 +22,7 @@
 import { createReferenceComments, isDictionary } from "./comments";
 import { PbxprojBuildError } from "./errors";
 import { ensureQuotes, formatData } from "./quotes";
+
 import type { PbxprojObject, PbxprojValue } from "./types";
 
 /** The encoding marker Xcode writes on the first line of every document. */

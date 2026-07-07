@@ -5,10 +5,11 @@
  * @module
  */
 
+import { asDictionary, asString, stringItems } from "./values";
+
 import type { PbxprojObject } from "../types";
 import type { XcodeObject } from "./object";
 import type { XcodeProject } from "./project";
-import { asDictionary, asString, stringItems } from "./values";
 
 /**
  * The views of a configuration list's build configurations, in list order.

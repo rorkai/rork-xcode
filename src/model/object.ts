@@ -10,17 +10,24 @@
  * @module
  */
 
+import { asString } from "./values";
+
 import type { PbxprojObject, PbxprojValue } from "../types";
 import type { XcodeProject } from "./project";
-import { asString } from "./values";
 
 /**
  * A typed handle on one object of the document.
  *
  * Two lookups of the same id return the same view instance (the project
  * keeps an identity map), so views compare with `===`.
+ *
+ * The type parameter describes the properties of a well-formed object of
+ * this kind. Subclasses fix it to their kind's interface, which gives
+ * `properties` autocompletion. Treat the shape as a description rather
+ * than a guarantee. A malformed document can hold anything, so the model
+ * itself always reads through the narrowing accessors.
  */
-export class XcodeObject {
+export class XcodeObject<Properties extends PbxprojObject = PbxprojObject> {
   /** The project this object belongs to. */
   readonly project: XcodeProject;
 
@@ -41,9 +48,12 @@ export class XcodeObject {
    * The object's raw dictionary inside the document. Mutations through the
    * model write here, and direct writes are equally valid; the model adds
    * no caching over these properties.
+   *
+   * The typed shape is asserted, not checked. It describes what a
+   * well-formed object of this kind carries (see `properties.ts`).
    */
-  get properties(): PbxprojObject {
-    return this.project.propertiesOf(this.id);
+  get properties(): Properties {
+    return this.project.propertiesOf(this.id) as Properties;
   }
 
   /**
@@ -64,9 +74,13 @@ export class XcodeObject {
 
   /**
    * Writes one property of the object.
+   *
+   * The write goes through the untyped document dictionary. TypeScript
+   * does not allow writes through a generic index, and the typed shape on
+   * `properties` is descriptive anyway.
    */
   set(key: string, value: PbxprojValue): void {
-    this.properties[key] = value;
+    this.project.propertiesOf(this.id)[key] = value;
   }
 
   /**

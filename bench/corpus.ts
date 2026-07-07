@@ -9,7 +9,9 @@
  * Per file, the sweep verifies:
  *
  * - the document parses;
- * - a parse → build → parse cycle reaches a byte-stable fixed point;
+ * - a parse, build, parse cycle reaches a byte-stable fixed point;
+ * - the object model can validate and edit the project (see the model
+ *   exercise below);
  * - the parsed values agree with plutil's own reading of the document
  *   (sampled; OpenStep scalars are untyped, so values compare as text).
  *
@@ -30,7 +32,16 @@ import { promisify } from "node:util";
 
 import { parsePlist, type PlistValue } from "rork-plist";
 
-import { buildPbxproj, parsePbxproj, PbxprojParseError, type PbxprojObject, type PbxprojValue } from "../dist/index.js";
+import {
+  buildPbxproj,
+  parsePbxproj,
+  PbxprojParseError,
+  ProductType,
+  XcodeModelError,
+  XcodeProject,
+  type PbxprojObject,
+  type PbxprojValue,
+} from "../dist/index.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -39,6 +50,19 @@ interface Options {
   maxFiles: number;
   roots: string[];
   sample: number;
+}
+
+/**
+ * Parses a flag value as a positive integer and rejects anything else. The
+ * sampling arithmetic divides by these values, so zero or NaN would turn
+ * the sample steps into Infinity or NaN and silently skip the checks.
+ */
+function parsePositiveInteger(flag: string, raw: string | undefined): number {
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1) {
+    throw new Error(`${flag} expects a positive integer, got ${raw}`);
+  }
+  return value;
 }
 
 /**
@@ -56,10 +80,10 @@ function parseArgs(argv: string[]): Options {
         options.roots = argv[++i]!.split(",");
         break;
       case "--max":
-        options.maxFiles = Number(argv[++i]);
+        options.maxFiles = parsePositiveInteger("--max", argv[++i]);
         break;
       case "--sample":
-        options.sample = Number(argv[++i]);
+        options.sample = parsePositiveInteger("--sample", argv[++i]);
         break;
       default:
         throw new Error(`unknown flag ${argv[i]}`);
@@ -69,9 +93,9 @@ function parseArgs(argv: string[]): Options {
 }
 
 /**
- * Directories the walk never descends into: dependency stores, build
- * output, caches, and version control. Pruning them keeps the sweep fast on
- * large checkouts without hiding any project sources.
+ * Directories the walk never descends into. They hold dependency stores,
+ * build output, caches, and version control, so pruning them keeps the
+ * sweep fast on large checkouts without hiding any project sources.
  */
 const PRUNED_DIRECTORIES = new Set([
   ".build",
@@ -213,8 +237,76 @@ for (const path of paths) {
   counts.set(outcome, (counts.get(outcome) ?? 0) + 1);
 }
 
-// Differential sample: every k-th parsed file, spreading the sample across
-// the corpus instead of front-loading whatever the walk found first.
+// Model exercise, for each parsed project:
+//
+// 1. Run validate(). Issues are statistics, not failures.
+// 2. If an app target exists, add a probe extension, then remove it.
+//    The document must stay byte-stable after each step.
+//
+// Findings are only unexpected errors and instability.
+console.log("exercising the object model on every parsed project...");
+const issueCounts = new Map<string, number>();
+const countIssue = (kind: string): void => {
+  issueCounts.set(kind, (issueCounts.get(kind) ?? 0) + 1);
+};
+let modelExercised = 0;
+let modelMutated = 0;
+const mutatedSample: string[] = [];
+
+for (const file of parsed) {
+  let project: XcodeProject;
+  try {
+    project = XcodeProject.fromDocument(structuredClone(file.value) as PbxprojObject);
+    for (const issue of project.validate()) {
+      countIssue(issue.kind);
+    }
+    modelExercised += 1;
+  } catch (error) {
+    if (error instanceof XcodeModelError) {
+      countIssue("model-unsupported");
+      continue;
+    }
+    findings.push(`${file.path}: validate threw unexpectedly, ${String(error)}`);
+    continue;
+  }
+
+  try {
+    const app = project.findMainAppTarget("ios");
+    if (app == null) {
+      continue;
+    }
+    app.setBuildSetting("RORK_XCODE_PROBE", "1");
+    const probe = project.addNativeTarget({ name: "RorkXcodeProbe", productType: ProductType.appExtension });
+    app.addDependency(probe);
+    app.embed(probe);
+    const mutated = project.build();
+    if (buildPbxproj(parsePbxproj(mutated) as PbxprojObject) !== mutated) {
+      findings.push(`${file.path}: mutated document is not a fixed point`);
+      continue;
+    }
+    project.removeTarget(probe);
+    app.removeBuildSetting("RORK_XCODE_PROBE");
+    const restored = project.build();
+    if (buildPbxproj(parsePbxproj(restored) as PbxprojObject) !== restored) {
+      findings.push(`${file.path}: document after teardown is not a fixed point`);
+      continue;
+    }
+    modelMutated += 1;
+    mutatedSample.push(mutated);
+  } catch (error) {
+    // A model error here is a project the mutation helpers cannot serve
+    // yet. That is a statistic worth seeing in the report, not a failure.
+    if (error instanceof XcodeModelError) {
+      countIssue("model-mutation-unsupported");
+    } else {
+      findings.push(`${file.path}: model mutation threw unexpectedly, ${String(error)}`);
+    }
+  }
+}
+
+// The differential sample takes every k-th parsed file, spreading it
+// across the corpus instead of front-loading whatever the walk found
+// first.
 const step = Math.max(1, Math.floor(parsed.length / options.sample));
 const differentialSample = parsed.filter((_, index) => index % step === 0).slice(0, options.sample);
 
@@ -240,9 +332,41 @@ for (const file of differentialSample) {
   }
 }
 
+// A slice of mutated documents also passes through plutil, proving Apple
+// tooling accepts what the model writes into real projects.
+const mutatedStep = Math.max(1, Math.floor(mutatedSample.length / Math.min(options.sample, 50)));
+const mutatedChecks = mutatedSample.filter((_, index) => index % mutatedStep === 0).slice(0, 50);
+let mutatedAccepted = 0;
+if (process.platform === "darwin") {
+  const { mkdtemp, rm, writeFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const directory = await mkdtemp(join(tmpdir(), "rork-xcode-corpus-"));
+  try {
+    for (const [index, text] of mutatedChecks.entries()) {
+      const file = join(directory, `${index}.pbxproj`);
+      await writeFile(file, text);
+      if (await plutilAccepts(file)) {
+        mutatedAccepted += 1;
+      } else {
+        findings.push(`mutated sample ${index}: plutil rejects the model's output`);
+      }
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
 console.log("\n=== fidelity ===");
 for (const [outcome, count] of [...counts.entries()].toSorted((a, b) => b[1] - a[1])) {
   console.log(`  ${outcome.padEnd(20)} ${String(count).padStart(6)}`);
+}
+
+console.log("\n=== object model ===");
+console.log(`  validated            ${String(modelExercised).padStart(6)}`);
+console.log(`  mutated + restored   ${String(modelMutated).padStart(6)}`);
+console.log(`  plutil on mutated    ${String(mutatedAccepted).padStart(6)} of ${mutatedChecks.length}`);
+for (const [kind, count] of [...issueCounts.entries()].toSorted((a, b) => b[1] - a[1])) {
+  console.log(`  issues: ${kind.padEnd(20)} ${String(count).padStart(6)}`);
 }
 
 console.log(`\n=== plutil differential ===\n  agreed on ${agreed} of ${differentialSample.length} compared files`);
@@ -254,4 +378,6 @@ if (findings.length > 0) {
   }
   process.exit(1);
 }
-console.log("\nno findings: every readable project parses, round-trips stably, and agrees with plutil");
+console.log(
+  "\nno findings: every readable project parses, round-trips stably, agrees with plutil, and survives model edits",
+);

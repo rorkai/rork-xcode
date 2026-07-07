@@ -89,6 +89,8 @@ Booleans are rejected on purpose. The format has no boolean notation (Xcode mode
 
 `XcodeProject` gives typed, mutable access to a parsed project. It is a set of lightweight views over the plain parsed document: all state lives in the document itself, a view holds only an object id, and `build()` serializes whatever the document currently says in Xcode's canonical layout. Model calls and direct dictionary access compose freely, and the model adds no measurable overhead over the raw functions (`XcodeProject.parse` and `project.build()` benchmark identically to `parsePbxproj` and `buildPbxproj`).
 
+This document-first design is deliberate, and the library's guarantees fall out of it. There is no inflate step on parse and no deflate step on build, so an untouched project rebuilds byte-identically and an edit changes only the entries it touches. Combined with deterministic identifiers, the same edit sequence produces the same bytes on every run, on every runtime.
+
 ```ts
 import { XcodeProject } from "rork-xcode";
 
@@ -109,6 +111,16 @@ app?.removeBuildSetting("CODE_SIGN_IDENTITY");
 
 for (const target of project.nativeTargets()) {
   console.log(target.name, target.productType);
+}
+```
+
+`project.targets()` returns every target kind. Aggregate targets (`PBXAggregateTarget`) and legacy external-build-tool targets (`PBXLegacyTarget`) share the full target surface, from configurations and build settings to phases and dependency wiring.
+
+```ts
+for (const target of project.targets()) {
+  if (target instanceof LegacyTarget) {
+    console.log(target.name, target.buildToolPath);
+  }
 }
 ```
 
@@ -172,6 +184,17 @@ embedPhase?.buildFileIds;
 app.ensureShellScriptPhase("Lint", { shellScript: "lint\n" });
 ```
 
+### Validation
+
+Projects rot over time. References outlive the objects they pointed at, orphans pile up, an entry loses its `isa`. `validate()` finds these problems and returns them as data. `pruneOrphans()` deletes everything the root object cannot reach, and it errs on the safe side. If anything still references an object, it stays.
+
+```ts
+for (const issue of project.validate()) {
+  console.warn(issue.kind, issue.message);
+}
+project.pruneOrphans(); // returns the removed ids
+```
+
 ### Removal
 
 `removeObject` deletes one object and strips every reference to it from the rest of the document. `removeTarget` composes it into a full teardown: the target's phases and build files, configurations, product reference and its embeddings, dependency objects other targets hold on it, membership exceptions, and synchronized folders no remaining target links. On-disk sources are untouched.
@@ -199,6 +222,8 @@ for (const [id, object] of project.objects()) {
 
 ### Semantics
 
+- **Typed vocabulary, generic fallback.** The typed views cover targets of every kind, groups and variant groups, Xcode 16 synchronized folders and their exception sets, build phases and build rules, Core Data version groups, and cross-project reference proxies. Every other kind is a generic `XcodeObject` with the same read and write access, so nothing in a document is out of reach.
+- **Typed, open property shapes.** Known keys autocomplete (`target.properties.productType`) and the shape stays open, so keys like `INFOPLIST_KEY_*` settings remain first-class. The shapes describe well-formed documents. When reading untrusted input, use the narrowing accessors, which never trust them.
 - **Two verb families.** `add*` wires something to its owner (a dependency, a package, a framework, a synchronized folder) and is idempotent: re-adding returns the existing wiring. `ensure*` returns a structural container, creating it when missing (a build phase, a group chain, the Products group). Both families can therefore run unconditionally in scaffold and repair flows.
 - **Deterministic identifiers.** New objects get ids derived from what they are (`XX` + 20 digest characters + `XX`, from an embedded hash), so programmatic edits are reproducible run to run and diffs stay minimal. Collisions within a document resolve deterministically, and identical edit sequences produce byte-identical documents.
 - **Soft reads, loud writes.** Real-world projects can be malformed, so lookups return `undefined` where a document could omit something. Operations that cannot proceed without structure (no root project object, an unknown product type, a view whose object was deleted) throw `XcodeModelError`.
@@ -235,7 +260,7 @@ Measured on an Apple M5 Max, Node.js 24, single thread, with `@bacons/xcode` 1.0
 - The committed fixture corpus spans project generations from Xcode 3 to Xcode 16, captured from real projects with identifiers neutralized: synchronized folders with both exception-set kinds, classic groups, variant groups, aggregate and legacy targets, reference proxies, build rules, Swift packages, and a ~100 KiB multiplatform framework project.
 - Documents already in current Xcode's layout must round-trip byte for byte; documents from other tool generations must normalize to a byte-stable fixed point with unchanged values.
 - On macOS, the suite cross-validates every fixture and its rebuilt form with `plutil`, Apple's own property list parser and the empirical ground truth for what Apple tooling accepts.
-- A corpus sweep (`pnpm corpus`) walks every Xcode project on the machine, verifies each one parses and reaches a byte-stable fixed point, and cross-validates a sample of parsed values against plutil's own reading.
+- A corpus sweep (`pnpm corpus`) walks every Xcode project on the machine, verifies each one parses and reaches a byte-stable fixed point, exercises the object model against it, and cross-validates a sample against plutil's own reading.
 - CI runs the full gate on Linux and macOS, and executes the built artifact on the oldest supported Node to enforce the `engines` floor.
 
 ## Releasing
