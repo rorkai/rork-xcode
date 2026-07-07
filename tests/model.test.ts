@@ -388,7 +388,7 @@ describe("typed properties", () => {
     const app = project.findMainAppTarget("ios");
     assert(app);
 
-    // Known keys read with their declared types; the annotations are
+    // Known keys read with their declared types. The annotations are
     // compile-time assertions as much as runtime ones.
     const name: string | undefined = app.properties.name;
     expect(name).toBe("SampleApp");

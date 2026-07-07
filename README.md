@@ -174,7 +174,7 @@ app.ensureShellScriptPhase("Lint", { shellScript: "lint\n" });
 
 ### Validation
 
-Projects rot over time: a reference outlives the object it pointed at, orphans pile up, an entry loses its `isa`. `validate()` finds these problems and returns them as data. `pruneOrphans()` deletes everything the root object cannot reach — and errs on the safe side: if anything still references an object, it stays.
+Projects rot over time. References outlive the objects they pointed at, orphans pile up, an entry loses its `isa`. `validate()` finds these problems and returns them as data. `pruneOrphans()` deletes everything the root object cannot reach, and it errs on the safe side. If anything still references an object, it stays.
 
 ```ts
 for (const issue of project.validate()) {
@@ -210,7 +210,7 @@ for (const [id, object] of project.objects()) {
 
 ### Semantics
 
-- **Typed, open property shapes.** Each view's `properties` is typed with the keys a well-formed object of its kind carries (`target.properties.productType` autocompletes), intersected with the document's open index signature, so arbitrary keys like `INFOPLIST_KEY_*` settings stay first-class. The shapes describe well-formed documents; reads from untrusted input should go through the narrowing accessors, which never trust them at runtime.
+- **Typed, open property shapes.** Known keys autocomplete (`target.properties.productType`) and the shape stays open, so keys like `INFOPLIST_KEY_*` settings remain first-class. The shapes describe well-formed documents. When reading untrusted input, use the narrowing accessors, which never trust them.
 - **Two verb families.** `add*` wires something to its owner (a dependency, a package, a framework, a synchronized folder) and is idempotent: re-adding returns the existing wiring. `ensure*` returns a structural container, creating it when missing (a build phase, a group chain, the Products group). Both families can therefore run unconditionally in scaffold and repair flows.
 - **Deterministic identifiers.** New objects get ids derived from what they are (`XX` + 20 digest characters + `XX`, from an embedded hash), so programmatic edits are reproducible run to run and diffs stay minimal. Collisions within a document resolve deterministically, and identical edit sequences produce byte-identical documents.
 - **Soft reads, loud writes.** Real-world projects can be malformed, so lookups return `undefined` where a document could omit something. Operations that cannot proceed without structure (no root project object, an unknown product type, a view whose object was deleted) throw `XcodeModelError`.

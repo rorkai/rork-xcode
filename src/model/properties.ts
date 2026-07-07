@@ -1,17 +1,15 @@
 /**
  * Property shapes of the object kinds the model works with.
  *
- * These interfaces describe well-formed documents: they type the keys a
- * kind carries and the values Xcode writes for them, which gives authoring
- * code autocompletion and catches wrong-typed writes. Every interface
- * stays open (it extends the document's index signature), so keys outside
- * the described set, like arbitrary `INFOPLIST_KEY_*` build settings,
- * remain first-class.
+ * These interfaces describe well-formed documents. They name the keys of
+ * each kind and the values Xcode writes for them, so authoring code gets
+ * autocompletion and wrong-typed writes fail. Every interface stays open
+ * through the document's index signature, which keeps unlisted keys like
+ * `INFOPLIST_KEY_*` settings first-class.
  *
- * Reads from untrusted documents should not lean on these shapes: a
- * malformed document can put any value under any key. The model's
- * accessors narrow at runtime and never trust the declared types; use them
- * (or narrow manually) when the document's origin is unknown.
+ * Do not lean on these shapes when reading untrusted documents. A
+ * malformed file can put any value under any key. The model's accessors
+ * narrow at runtime and never trust the declared types.
  *
  * @module
  */
@@ -20,8 +18,8 @@ import type { PbxprojObject } from "../types";
 
 /**
  * Build settings of one configuration. The named keys are the ones
- * programmatic edits touch most; projects carry many more, and all of
- * them remain accessible through the index signature.
+ * programmatic edits touch most. Projects carry many more, and all of
+ * them stay accessible through the index signature.
  */
 export interface BuildSettings extends PbxprojObject {
   ASSETCATALOG_COMPILER_APPICON_NAME?: string;
@@ -93,7 +91,7 @@ export interface GroupProperties extends PbxprojObject {
 
 /**
  * Properties shared by the `PBX*BuildPhase` kinds. Copy-files and
- * shell-script phases carry the destination and script keys; the standard
+ * shell-script phases carry the destination and script keys. The standard
  * phases leave them absent.
  */
 export interface BuildPhaseProperties extends PbxprojObject {
@@ -183,8 +181,8 @@ export interface ContainerItemProxyProperties extends PbxprojObject {
 
 /**
  * Properties of an `XCRemoteSwiftPackageReference` or
- * `XCLocalSwiftPackageReference`; remote references carry the repository
- * and requirement, local ones the relative path.
+ * `XCLocalSwiftPackageReference`. Remote references carry the repository
+ * and requirement. Local ones carry the relative path.
  */
 export interface SwiftPackageReferenceProperties extends PbxprojObject {
   relativePath?: string;

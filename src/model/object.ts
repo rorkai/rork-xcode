@@ -21,11 +21,11 @@ import type { XcodeProject } from "./project";
  * Two lookups of the same id return the same view instance (the project
  * keeps an identity map), so views compare with `===`.
  *
- * The type parameter describes the property shape of a well-formed object
- * of this kind; subclasses fix it to their kind's interface so
- * `properties` autocompletes. The shape is a description, not a runtime
- * guarantee: malformed documents can hold anything, which is why the
- * model's own logic reads through narrowing accessors instead.
+ * The type parameter describes the properties of a well-formed object of
+ * this kind. Subclasses fix it to their kind's interface, which gives
+ * `properties` autocompletion. Treat the shape as a description rather
+ * than a guarantee. A malformed document can hold anything, so the model
+ * itself always reads through the narrowing accessors.
  */
 export class XcodeObject<Properties extends PbxprojObject = PbxprojObject> {
   /** The project this object belongs to. */
@@ -49,7 +49,7 @@ export class XcodeObject<Properties extends PbxprojObject = PbxprojObject> {
    * model write here, and direct writes are equally valid; the model adds
    * no caching over these properties.
    *
-   * The typed shape is asserted, not checked: it describes what a
+   * The typed shape is asserted, not checked. It describes what a
    * well-formed object of this kind carries (see `properties.ts`).
    */
   get properties(): Properties {
@@ -75,9 +75,9 @@ export class XcodeObject<Properties extends PbxprojObject = PbxprojObject> {
   /**
    * Writes one property of the object.
    *
-   * The write goes through the untyped document dictionary: generic types
-   * cannot be indexed for writing, and the typed shape on `properties` is
-   * descriptive rather than enforced.
+   * The write goes through the untyped document dictionary. TypeScript
+   * does not allow writes through a generic index, and the typed shape on
+   * `properties` is descriptive anyway.
    */
   set(key: string, value: PbxprojValue): void {
     this.project.propertiesOf(this.id)[key] = value;

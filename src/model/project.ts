@@ -487,9 +487,10 @@ export class XcodeProject {
   }
 
   /**
-   * Validates the document's object graph: the root object, object kinds,
-   * the known reference schema, and reachability. Returns every problem
-   * found; an empty array means the graph is structurally sound.
+   * Validates the document's object graph and returns every problem
+   * found. An empty array means the graph is structurally sound. The
+   * checks cover the root object, object kinds, known references, and
+   * reachability.
    */
   validate(): ProjectIssue[] {
     return validateProject(this);
@@ -497,8 +498,8 @@ export class XcodeProject {
 
   /**
    * Removes every object unreachable from the root object and returns the
-   * removed ids. Reachability is conservative: any real reference keeps an
-   * object alive, even through properties outside the known schema.
+   * removed ids. Reachability is conservative. Any real reference keeps
+   * an object alive, even through properties outside the known schema.
    */
   pruneOrphans(): string[] {
     return pruneOrphanObjects(this);

@@ -113,8 +113,8 @@ describe("validate", () => {
   it("treats ids inside nested attribute dictionaries as reachable", () => {
     const document = healthyDocument();
     const objects = document["objects"] as PbxprojObject;
-    // TargetAttributes-style: the orphan candidate is referenced only as a
-    // nested dictionary key.
+    // Mimics TargetAttributes, where the orphan candidate is referenced
+    // only as a nested dictionary key.
     (objects["P1"] as PbxprojObject)["attributes"] = {
       TargetAttributes: { XXKEPT1: { CreatedOnToolsVersion: "17.0" } },
     };

@@ -1,11 +1,11 @@
 /**
  * Structural validation and cleanup for project documents.
  *
- * Real projects accumulate damage: references to deleted objects, objects
- * nothing points at anymore, entries missing their kind. Xcode tolerates
- * some of it silently and breaks on the rest, so tooling benefits from an
- * explicit check. {@link validateProject} reports the problems;
- * {@link pruneOrphanObjects} removes the unreachable ones.
+ * Real projects accumulate damage. References outlive the objects they
+ * point at, orphans pile up, and entries lose their kind. Xcode tolerates
+ * some of that silently and breaks on the rest. {@link validateProject}
+ * reports the problems, and {@link pruneOrphanObjects} removes the
+ * unreachable objects.
  *
  * @module
  */
@@ -18,7 +18,7 @@ import type { XcodeProject } from "./project";
 /**
  * Object properties that hold a single reference to another object of the
  * same document. `remoteGlobalIDString` and `TestTargetID` are absent by
- * design: they reference objects of another container, so they cannot be
+ * design. They reference objects of another container, so they cannot be
  * resolved here.
  */
 const SCALAR_REFERENCE_PROPERTIES = [
@@ -62,9 +62,9 @@ const LIST_REFERENCE_PROPERTIES = [
  * - `missing-isa`: an object carries no kind, which Xcode cannot read.
  * - `dangling-reference`: a known reference property points at an id the
  *   document does not contain.
- * - `unreachable-object`: nothing on the path from the root references the
- *   object; Xcode ignores such orphans, and {@link pruneOrphanObjects}
- *   removes them.
+ * - `unreachable-object`: nothing on the path from the root references
+ *   the object. Xcode ignores such orphans, and
+ *   {@link pruneOrphanObjects} removes them.
  */
 export type ProjectIssueKind = "dangling-root" | "missing-isa" | "dangling-reference" | "unreachable-object";
 
@@ -72,7 +72,7 @@ export type ProjectIssueKind = "dangling-root" | "missing-isa" | "dangling-refer
  * One problem found by {@link validateProject}.
  */
 export interface ProjectIssue {
-  /** The problem's kind; see {@link ProjectIssueKind}. */
+  /** The problem's kind, one of {@link ProjectIssueKind}. */
   kind: ProjectIssueKind;
 
   /** Human-readable description with the involved ids and properties. */
@@ -89,7 +89,7 @@ export interface ProjectIssue {
  * Reachability follows every string that names an existing object,
  * anywhere in an object's properties (including nested dictionaries, their
  * keys, and arrays). This is deliberately broader than the known reference
- * schema: an unknown-but-real reference keeps its object alive, so pruning
+ * schema. An unknown-but-real reference keeps its object alive, so pruning
  * stays conservative.
  */
 export function reachableObjectIds(project: XcodeProject): Set<string> {
@@ -158,8 +158,8 @@ function checkReference(
 }
 
 /**
- * Validates the document's object graph and returns every problem found;
- * an empty array means the graph is structurally sound. The checks cover
+ * Validates the document's object graph and returns every problem found.
+ * An empty array means the graph is structurally sound. The checks cover
  * the root object, object kinds, the known reference schema, and
  * reachability. See {@link ProjectIssueKind} for the meanings.
  */
@@ -226,9 +226,9 @@ export function validateProject(project: XcodeProject): ProjectIssue[] {
  * returns the removed ids, in document order. A document whose root is
  * missing prunes nothing, since reachability is undefined there.
  *
- * Reachability is the conservative walk of {@link reachableObjectIds}, so
- * an object kept alive by any real reference survives even when the
- * reference property is outside the known schema.
+ * Reachability is the conservative walk of {@link reachableObjectIds}.
+ * Any real reference keeps an object alive, even when the reference
+ * property is outside the known schema.
  */
 export function pruneOrphanObjects(project: XcodeProject): string[] {
   const reachable = reachableObjectIds(project);
