@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+reviews:
+  tools:
+    # The eslint devDependency exists only to host the perfectionist
+    # plugin oxlint loads through jsPlugins. Linting runs through oxlint
+    # in CI, so CodeRabbit must not install and run ESLint itself.
+    eslint:
+      enabled: false
