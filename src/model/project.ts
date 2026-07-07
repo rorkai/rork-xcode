@@ -19,7 +19,17 @@ import { generateObjectId } from "../uuid";
 import { pruneOrphanObjects, validateProject, type ProjectIssue } from "./doctor";
 import { DEPLOYMENT_TARGET_KEY, Isa, PRODUCT_FILE_INFO, ProductType, type ApplePlatform } from "./isa";
 import { XcodeObject } from "./object";
-import { BuildPhase, BuildRule, Group, ReferenceProxy, SyncRootGroup, VersionGroup } from "./objects";
+import {
+  BuildConfiguration,
+  BuildPhase,
+  BuildRule,
+  ContainerItemProxy,
+  FileReference,
+  Group,
+  ReferenceProxy,
+  SyncRootGroup,
+  VersionGroup,
+} from "./objects";
 import { defaultConfigurationSettingsOf } from "./settings";
 import { AggregateTarget, LegacyTarget, NativeTarget, Target } from "./target";
 import { asDictionary, asString, ensureArray, stringItems } from "./values";
@@ -714,6 +724,12 @@ export class XcodeProject {
         return new SyncRootGroup(this, id);
       case Isa.buildRule:
         return new BuildRule(this, id);
+      case Isa.buildConfiguration:
+        return new BuildConfiguration(this, id);
+      case Isa.fileReference:
+        return new FileReference(this, id);
+      case Isa.containerItemProxy:
+        return new ContainerItemProxy(this, id);
       case Isa.referenceProxy:
         return new ReferenceProxy(this, id);
       default:

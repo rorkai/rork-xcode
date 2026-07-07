@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { XcschemeBuildError, XcschemeParseError } from "../src/errors";
 import { buildXcscheme } from "../src/scheme/build";
-import { createXcscheme, xcschemeElements } from "../src/scheme/model";
+import { createXcscheme, Xcscheme, xcschemeElements } from "../src/scheme/model";
 import { parseXcscheme } from "../src/scheme/parse";
 
 import type { XcschemeElement } from "../src/scheme/types";
@@ -11,10 +11,10 @@ function fixture(name: string): string {
   return readFileSync(new URL(`fixtures/${name}`, import.meta.url), "utf-8");
 }
 
-// Each fixture mirrors an Xcode-written scheme shape: a current app scheme
-// with tests, one heavy on pre/post actions and references, and one with
-// remote runnables, entities in scripts, and a reference without a
-// blueprint identifier.
+// Each fixture mirrors an Xcode-written scheme shape. One is a current
+// app scheme with tests, one is heavy on pre/post actions and references,
+// and one carries remote runnables, entities in scripts, and a reference
+// without a blueprint identifier.
 const FIXTURES = ["scheme-app.xcscheme", "scheme-actions.xcscheme", "scheme-remote.xcscheme"];
 
 describe("round-trip", () => {
@@ -106,7 +106,7 @@ describe("parse failures", () => {
   });
 
   it("does not resolve entities or attributes through the Object prototype", () => {
-    // `constructor` exists on Object.prototype; as an entity it must still
+    // `constructor` exists on Object.prototype. As an entity it must still
     // be unknown, and as an attribute name it must not read as duplicate.
     expect(() => parseXcscheme('<Scheme a = "&constructor;"></Scheme>')).toThrow(/Unknown entity/u);
 
@@ -142,6 +142,43 @@ describe("build failures", () => {
 });
 
 describe("editing", () => {
+  it("renames buildable references through the typed model", () => {
+    const scheme = Xcscheme.parse(fixture("scheme-app.xcscheme"));
+
+    const references = scheme.buildableReferences();
+    expect(references.map((reference) => reference.blueprintName)).toEqual([
+      "DemoApp",
+      "DemoAppTests",
+      "DemoApp",
+      "DemoApp",
+    ]);
+
+    for (const reference of references) {
+      reference.blueprintName = reference.blueprintName!.replace("DemoApp", "NewApp");
+      reference.buildableName = reference.buildableName!.replace("DemoApp", "NewApp");
+      reference.referencedContainer = "container:NewApp.xcodeproj";
+    }
+
+    const built = scheme.build();
+    expect(built).not.toContain("DemoApp");
+    expect(built).toContain('BlueprintName = "NewApp"');
+    expect(built).toContain('BuildableName = "NewAppTests.xctest"');
+    // Reads reflect writes immediately, since views sit on the tree.
+    expect(scheme.buildableReferences()[0]?.blueprintIdentifier).toBe("A10000000000000000000001");
+  });
+
+  it("creates the default app scheme through the model", () => {
+    const scheme = Xcscheme.create({ appName: "DemoApp", blueprintIdentifier: "A10000000000000000000001" });
+
+    expect(scheme.root.name).toBe("Scheme");
+    expect(scheme.elements("BuildAction")).toHaveLength(1);
+    const [reference] = scheme.buildableReferences();
+    assert(reference);
+    expect(reference.blueprintIdentifier).toBe("A10000000000000000000001");
+    expect(reference.referencedContainer).toBe("container:DemoApp.xcodeproj");
+    expect(buildXcscheme(parseXcscheme(scheme.build()))).toBe(scheme.build());
+  });
+
   it("renames buildable references through the element query", () => {
     const document = parseXcscheme(fixture("scheme-app.xcscheme"));
 

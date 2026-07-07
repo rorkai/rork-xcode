@@ -1,12 +1,13 @@
 /**
  * Serializer for the `.xcscheme` XML dialect.
  *
- * The output reproduces Xcode's own layout byte for byte: the UTF-8
- * declaration, three-space indentation, one attribute per line with
- * spaces around the equals sign, the closing angle bracket glued to the
- * last attribute, and an explicit close tag on every element. Parsing an
- * Xcode-written scheme and building it back yields the identical file,
- * and any input reaches that canonical form in one build.
+ * The output reproduces Xcode's own layout byte for byte. Xcode writes
+ * the UTF-8 declaration, indents with three spaces, puts each attribute
+ * on its own line with spaces around the equals sign, glues the closing
+ * angle bracket to the last attribute, and closes every element with an
+ * explicit close tag. Parsing an Xcode-written scheme and building it
+ * back therefore yields the identical file, and any other input reaches
+ * that canonical form in one build.
  *
  * @module
  */
@@ -16,20 +17,21 @@ import { isXcschemeElement } from "./types";
 
 import type { XcschemeDocument, XcschemeElement, XcschemeNode } from "./types";
 
+/** The declaration line Xcode writes at the top of every scheme file. */
 const XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8"?>\n';
 
 /** One indentation step of Xcode's scheme writer. */
 const INDENT = "   ";
 
 /**
- * Matches the names Xcode's scheme vocabulary uses; a stray non-name
- * (an empty string, spaces, XML syntax) must fail rather than produce a
+ * Matches valid XML names. A stray non-name, such as an empty string or
+ * one carrying spaces or XML syntax, must fail rather than produce a
  * document no parser accepts.
  */
 const NAME_PATTERN = /^[A-Za-z_:][A-Za-z0-9_:.-]*$/u;
 
 /**
- * Matches characters that cannot appear in an attribute value: XML 1.0
+ * Matches characters that cannot appear in an attribute value. XML 1.0
  * has no representation for control characters other than tab, line
  * feed, and carriage return.
  */
@@ -56,9 +58,10 @@ export function buildXcscheme(document: XcschemeDocument): string {
 }
 
 /**
- * Renders one element with Xcode's layout: attributes each on their own
- * line indented one step past the tag, `>` glued to the last attribute,
- * children indented one step, and always an explicit close tag.
+ * Renders one element with Xcode's layout. Attributes go each on their
+ * own line indented one step past the tag, the `>` glues to the last
+ * attribute, children indent one step, and the close tag is always
+ * explicit.
  */
 function renderElement(element: XcschemeElement, depth: number, path: string): string {
   if (!NAME_PATTERN.test(element.name)) {
@@ -110,10 +113,10 @@ function renderChildren(children: XcschemeNode[], depth: number, path: string): 
 }
 
 /**
- * Escapes an attribute value the way Xcode's writer does: the five named
- * entities for XML syntax characters, and character references for tab,
- * line feed, and carriage return so they survive attribute-value
- * normalization on the next parse.
+ * Escapes an attribute value the way Xcode's writer does. XML syntax
+ * characters become the five named entities, and tab, line feed, and
+ * carriage return become character references so they survive
+ * attribute-value normalization on the next parse.
  */
 function escapeAttribute(value: string, path: string, attributeName: string): string {
   const unencodable = UNENCODABLE_PATTERN.exec(value);

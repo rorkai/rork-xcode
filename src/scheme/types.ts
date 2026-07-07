@@ -1,10 +1,11 @@
 /**
  * The node model of a scheme document.
  *
- * A parsed `.xcscheme` is a tree of plain objects: elements with ordered
- * attributes and child nodes, plus the occasional comment. All state lives
- * in this tree. There is no wrapper class to keep in sync, so callers
- * mutate nodes directly and serialize whatever the tree currently says.
+ * A parsed `.xcscheme` is a tree of plain objects. Elements carry ordered
+ * attributes and child nodes, and comments survive as their own nodes.
+ * All state lives in this tree. There is no wrapper to keep in sync, so
+ * callers mutate nodes directly and serialize whatever the tree currently
+ * says.
  *
  * @module
  */
@@ -12,9 +13,9 @@
 /**
  * An XML element of a scheme document.
  *
- * Attribute order is preserved and meaningful: the writer emits attributes
- * in insertion order, which is how byte-identical round-trips of
- * Xcode-written files fall out. Assigning an existing key keeps its
+ * Attribute order is preserved and meaningful. The writer emits
+ * attributes in insertion order, which is how Xcode-written files
+ * round-trip byte-identically. Assigning an existing key keeps its
  * position, and adding a new key appends it.
  */
 export interface XcschemeElement {
@@ -44,9 +45,10 @@ export interface XcschemeComment {
 export type XcschemeNode = XcschemeElement | XcschemeComment;
 
 /**
- * A parsed scheme file: its root element plus any comments sitting
- * outside it. Xcode writes only the root, so the comment lists are almost
- * always empty, but files that carry them round-trip without loss.
+ * A parsed scheme file, made of its root element plus any comments
+ * sitting outside it. Xcode writes only the root, so the comment lists
+ * are almost always empty, but files that carry them round-trip without
+ * loss.
  */
 export interface XcschemeDocument {
   /** Comments before the root element. */
