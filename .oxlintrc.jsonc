@@ -11,8 +11,8 @@
   "rules": {
     "eqeqeq": ["error", "always", { "null": "ignore" }],
     // Named specifiers sort values before types. Whole import statements
-    // are grouped by the formatter (experimentalSortImports); the formatter
-    // has no export counterpart, so sort-exports covers whole statements.
+    // are grouped by the formatter (sortImports). The formatter has no
+    // export counterpart, so sort-exports orders whole export statements.
     "perfectionist/sort-named-imports": ["error", { "groups": ["value-import", "type-import"] }],
     "perfectionist/sort-named-exports": ["error", { "groups": ["value-export", "type-export"] }],
     "perfectionist/sort-exports": "error",
