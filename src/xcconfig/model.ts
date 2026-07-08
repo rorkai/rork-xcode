@@ -18,6 +18,10 @@ import type { XcconfigAssignment, XcconfigDocument, XcconfigInclude } from "./ty
  * Resolves an `#include` path to the included file's model. Returning
  * `undefined` skips the include, which is always legal for the
  * `#include?` form and mirrors a missing file for the strict form.
+ *
+ * Cycles are detected by the include path exactly as written, so a file
+ * reachable through two different spellings of the same path is applied
+ * once per spelling. Resolvers that memoize per path avoid that.
  */
 export type XcconfigIncludeResolver = (path: string, optional: boolean) => Xcconfig | undefined;
 
@@ -90,14 +94,18 @@ export class Xcconfig {
 
   /**
    * Every assignment of this file, conditional ones included, in
-   * document order.
+   * document order. The items are the document's own nodes, not copies,
+   * so treat them as read-only views. Writes belong on {@link set},
+   * which keeps a statement's value and its source text in step.
    */
   assignments(): readonly XcconfigAssignment[] {
     return this.document.statements.filter((statement) => statement.kind === "assignment");
   }
 
   /**
-   * The `#include` directives of this file, in document order.
+   * The `#include` directives of this file, in document order. The items
+   * are the document's own nodes, not copies, so treat them as read-only
+   * views.
    */
   includes(): readonly XcconfigInclude[] {
     return this.document.statements.filter((statement) => statement.kind === "include");
@@ -122,7 +130,8 @@ export class Xcconfig {
    * Writes a setting. The last unconditional assignment of the key is
    * rewritten in place as a canonical `KEY = value` line, replacing any
    * trailing comment the line carried. A key the file does not assign
-   * yet is appended at the end.
+   * yet is appended at the end, following the document's line-ending
+   * convention.
    */
   set(key: string, value: string): void {
     let target: XcconfigAssignment | undefined;
@@ -138,9 +147,10 @@ export class Xcconfig {
       return;
     }
 
+    const eol = this.document.statements.find((statement) => statement.eol !== "")?.eol ?? "\n";
     const last = this.document.statements.at(-1);
     if (last != null && last.eol === "") {
-      last.eol = "\n";
+      last.eol = eol;
     }
     this.document.statements.push({
       kind: "assignment",
@@ -148,7 +158,7 @@ export class Xcconfig {
       conditions: [],
       value,
       raw: `${key} = ${value}`,
-      eol: "\n",
+      eol,
     });
   }
 
@@ -174,19 +184,26 @@ export class Xcconfig {
    *
    * Includes only take part when {@link XcconfigSettingsOptions.resolveInclude}
    * is provided, since the library never touches the filesystem itself.
-   * A file reachable through more than one include path is applied once.
+   * Each include path is followed once, and a model instance is applied
+   * once, so cyclic includes terminate even when the resolver parses a
+   * fresh instance per call.
    */
   settings(options: XcconfigSettingsOptions = {}): Record<string, string> {
     const merged: Record<string, string> = {};
-    const visited = new Set<Xcconfig>();
+    const visitedConfigs = new Set<Xcconfig>();
+    const visitedPaths = new Set<string>();
 
     const visit = (config: Xcconfig): void => {
-      if (visited.has(config)) {
+      if (visitedConfigs.has(config)) {
         return;
       }
-      visited.add(config);
+      visitedConfigs.add(config);
       for (const statement of config.document.statements) {
         if (statement.kind === "include") {
+          if (visitedPaths.has(statement.path)) {
+            continue;
+          }
+          visitedPaths.add(statement.path);
           const included = options.resolveInclude?.(statement.path, statement.optional);
           if (included != null) {
             visit(included);

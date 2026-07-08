@@ -150,7 +150,7 @@ describe("xcconfig fixtures", () => {
         // The optional local-overrides file does not exist, matching the
         // #include? contract.
         expect(optional).toBe(true);
-        return undefined;
+        return;
       },
     });
 
@@ -219,5 +219,30 @@ describe("Xcconfig", () => {
     expect(settings).toEqual({ A: "from-first", B: "from-second" });
 
     expect(first.settings()).toEqual({ A: "from-first" });
+  });
+
+  it("survives cycles when the resolver parses fresh instances per call", () => {
+    // A resolver without a cache returns a new model for every call, so
+    // instance identity alone cannot terminate an A -> B -> A cycle. The
+    // include path does.
+    const sources: Record<string, string> = {
+      "a.xcconfig": '#include "b.xcconfig"\nFROM_A = yes\n',
+      "b.xcconfig": '#include "a.xcconfig"\nFROM_B = yes\n',
+    };
+
+    const settings = Xcconfig.parse(sources["a.xcconfig"]!).settings({
+      resolveInclude: (path) => {
+        const source = sources[path];
+        return source == null ? undefined : Xcconfig.parse(source);
+      },
+    });
+
+    expect(settings).toEqual({ FROM_A: "yes", FROM_B: "yes" });
+  });
+
+  it("appends with the document's line-ending convention", () => {
+    const config = Xcconfig.parse("A = 1\r\nB = 2\r\n");
+    config.set("C", "3");
+    expect(config.build()).toBe("A = 1\r\nB = 2\r\nC = 3\r\n");
   });
 });
