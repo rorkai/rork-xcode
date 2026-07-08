@@ -150,7 +150,6 @@ describe("xcconfig fixtures", () => {
         // The optional local-overrides file does not exist, matching the
         // #include? contract.
         expect(optional).toBe(true);
-        return;
       },
     });
 
