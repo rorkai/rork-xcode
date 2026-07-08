@@ -100,6 +100,32 @@ export class XcschemeParseError extends Error {
 }
 
 /**
+ * Thrown when the source text is not a well-formed build configuration
+ * file (the line-based format of `.xcconfig` files).
+ *
+ * The message always embeds the line and column of the failure, and the
+ * same information is available in structured form on {@link position}
+ * for programmatic use.
+ */
+export class XcconfigParseError extends Error {
+  /** Where in the source text parsing failed. */
+  readonly position: PbxprojErrorPosition;
+
+  /**
+   * @param message Failure description without location; the location is
+   *   appended automatically.
+   * @param source Full source text, used to compute the position.
+   * @param offset Character offset of the failure inside `source`.
+   */
+  constructor(message: string, source: string, offset: number) {
+    const position = positionAt(source, offset);
+    super(`${message} (line ${position.line}, column ${position.column})`);
+    this.name = "XcconfigParseError";
+    this.position = position;
+  }
+}
+
+/**
  * Thrown when a scheme element cannot be written as XML.
  *
  * Raised for element and attribute names that are not valid XML names and

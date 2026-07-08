@@ -31,6 +31,7 @@ import {
   SwiftPackageReference,
   TargetDependency,
   VersionGroup,
+  Xcconfig,
   XcodeModelError,
   XcodeProject,
   type PbxprojObject,
@@ -784,6 +785,84 @@ describe("aggregate targets, legacy targets, and exotic references", () => {
     expect(proxy.path).toBe("libOther.a");
     expect(proxy.remoteReference()?.id).toBe(remote.id);
     expect(project.validate()).toEqual([]);
+  });
+});
+
+describe("xcconfig layering", () => {
+  it("resolves build settings through registered xcconfig files in Xcode's order", () => {
+    const project = openApp();
+    const app = project.findMainAppTarget("ios");
+    assert(app);
+
+    const targetReference = project.add(
+      Isa.fileReference,
+      { lastKnownFileType: "text.xcconfig", path: "Config/Target.xcconfig", sourceTree: "<group>" },
+      "target xcconfig",
+    );
+    const projectReference = project.add(
+      Isa.fileReference,
+      { lastKnownFileType: "text.xcconfig", path: "Config/Project.xcconfig", sourceTree: "<group>" },
+      "project xcconfig",
+    );
+
+    for (const configuration of app.buildConfigurations()) {
+      configuration.set("baseConfigurationReference", targetReference.id);
+    }
+    const projectList = project.get(project.rootProject.getString("buildConfigurationList"));
+    assert(ConfigurationList.is(projectList));
+    for (const configuration of projectList.configurations()) {
+      configuration.set("baseConfigurationReference", projectReference.id);
+    }
+    expect(app.buildConfigurations()[0]?.baseConfigurationReference()).toBe(targetReference);
+
+    // Unregistered files contribute nothing, preserving prior behavior.
+    expect(app.getBuildSetting("XCCONFIG_ONLY")).toBeUndefined();
+
+    project.registerXcconfig(
+      targetReference,
+      Xcconfig.parse("XCCONFIG_ONLY = from-target-xcconfig\nSWIFT_VERSION = 6.0\nFROM_INCLUDE = direct\n"),
+    );
+    project.registerXcconfig(
+      projectReference,
+      Xcconfig.parse("PROJECT_XCCONFIG_ONLY = from-project-xcconfig\nXCCONFIG_ONLY = from-project-xcconfig\n"),
+    );
+
+    // A key only the xcconfig files carry resolves through them, with the
+    // target's file shadowing the project's.
+    expect(app.getBuildSetting("XCCONFIG_ONLY")).toBe("from-target-xcconfig");
+    expect(app.getBuildSetting("PROJECT_XCCONFIG_ONLY")).toBe("from-project-xcconfig");
+
+    // Explicit configuration settings still win over the xcconfig layer.
+    app.setBuildSetting("SWIFT_VERSION", "5.10");
+    expect(app.getBuildSetting("SWIFT_VERSION")).toBe("5.10");
+
+    // Project-level pbxproj settings sit above the project xcconfig; the
+    // fixture defines SDKROOT there, so a project xcconfig cannot mask it.
+    project.registerXcconfig(projectReference, Xcconfig.parse("SDKROOT = appletvos\n"));
+    expect(app.getBuildSetting("SDKROOT")).toBe("iphoneos");
+  });
+
+  it("registers includes through the resolver", () => {
+    const project = openApp();
+    const app = project.findMainAppTarget("ios");
+    assert(app);
+
+    const reference = project.add(
+      Isa.fileReference,
+      { lastKnownFileType: "text.xcconfig", path: "Config/App.xcconfig", sourceTree: "<group>" },
+      "including xcconfig",
+    );
+    for (const configuration of app.buildConfigurations()) {
+      configuration.set("baseConfigurationReference", reference.id);
+    }
+
+    const shared = Xcconfig.parse("FROM_SHARED = yes\n");
+    project.registerXcconfig(reference, Xcconfig.parse('#include "shared.xcconfig"\nOWN = yes\n'), {
+      resolveInclude: (path) => (path === "shared.xcconfig" ? shared : undefined),
+    });
+
+    expect(app.getBuildSetting("FROM_SHARED")).toBe("yes");
+    expect(app.getBuildSetting("OWN")).toBe("yes");
   });
 });
 

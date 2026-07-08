@@ -535,6 +535,17 @@ export class BuildConfiguration extends XcodeObject<BuildConfigurationProperties
   get buildSettings(): BuildSettings | undefined {
     return asDictionary(this.properties["buildSettings"]) as BuildSettings | undefined;
   }
+
+  /**
+   * The view of the `.xcconfig` file reference this configuration is
+   * based on, when the configuration has one and it resolves. The file's
+   * settings sit below the configuration's own `buildSettings` in
+   * Xcode's resolution order.
+   */
+  baseConfigurationReference(): FileReference | undefined {
+    const view = this.project.get(this.getString("baseConfigurationReference"));
+    return FileReference.is(view) ? view : undefined;
+  }
 }
 
 /**

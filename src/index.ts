@@ -19,6 +19,7 @@ export { buildPbxproj } from "./build";
 export {
   PbxprojBuildError,
   PbxprojParseError,
+  XcconfigParseError,
   XcodeModelError,
   XcschemeBuildError,
   XcschemeParseError,
@@ -86,6 +87,9 @@ export {
 export { parseXcscheme } from "./scheme/parse";
 export { isXcschemeElement } from "./scheme/types";
 export { generateObjectId } from "./uuid";
+export { buildXcconfig } from "./xcconfig/build";
+export { Xcconfig, type XcconfigIncludeResolver, type XcconfigSettingsOptions } from "./xcconfig/model";
+export { parseXcconfig } from "./xcconfig/parse";
 
 export type { ProjectIssue, ProjectIssueKind } from "./model/doctor";
 export type {
@@ -118,3 +122,12 @@ export type {
 } from "./model/properties";
 export type { XcschemeComment, XcschemeDocument, XcschemeElement, XcschemeNode } from "./scheme/types";
 export type { PbxprojArray, PbxprojObject, PbxprojValue } from "./types";
+export type {
+  XcconfigAssignment,
+  XcconfigBlank,
+  XcconfigComment,
+  XcconfigCondition,
+  XcconfigDocument,
+  XcconfigInclude,
+  XcconfigStatement,
+} from "./xcconfig/types";

@@ -29,8 +29,8 @@ import {
   type ShellScriptBuildPhase,
   type SourcesBuildPhase,
 } from "./objects";
-import { configurationsOf, defaultConfigurationSettingsOf } from "./settings";
-import { asString, ensureArray, stringItems } from "./values";
+import { configurationsOf, defaultConfigurationOf, defaultConfigurationSettingsOf } from "./settings";
+import { asDictionary, asString, ensureArray, stringItems } from "./values";
 
 import type { PbxprojObject } from "../types";
 import type { BuildPhaseIsa } from "./isa";
@@ -86,15 +86,39 @@ export class Target<Properties extends TargetProperties = TargetProperties> exte
    * generated app templates set values like `SDKROOT` only at the project
    * level.
    *
+   * Configurations based on `.xcconfig` files take part once the files
+   * are registered through {@link XcodeProject.registerXcconfig}, in
+   * Xcode's order: target settings, the target's xcconfig, project
+   * settings, the project's xcconfig.
+   *
    * Only string values are returned; a list- or number-valued setting reads
    * as `undefined`.
    */
   getBuildSetting(key: string): string | undefined {
-    const targetSettings = this.defaultConfigurationSettings();
+    const targetConfiguration = defaultConfigurationOf(this.project, this.getString("buildConfigurationList"));
+    const targetSettings = asDictionary(targetConfiguration?.properties["buildSettings"]);
     if (targetSettings != null && key in targetSettings) {
       return asString(targetSettings[key]);
     }
-    return asString(this.project.rootProject.defaultConfigurationSettings()?.[key]);
+
+    const targetXcconfig =
+      targetConfiguration == null ? undefined : this.project.xcconfigSettingsOf(targetConfiguration);
+    if (targetXcconfig != null && key in targetXcconfig) {
+      return targetXcconfig[key];
+    }
+
+    const projectConfiguration = defaultConfigurationOf(
+      this.project,
+      this.project.rootProject.getString("buildConfigurationList"),
+    );
+    const projectSettings = asDictionary(projectConfiguration?.properties["buildSettings"]);
+    if (projectSettings != null && key in projectSettings) {
+      return asString(projectSettings[key]);
+    }
+
+    const projectXcconfig =
+      projectConfiguration == null ? undefined : this.project.xcconfigSettingsOf(projectConfiguration);
+    return projectXcconfig?.[key];
   }
 
   /**

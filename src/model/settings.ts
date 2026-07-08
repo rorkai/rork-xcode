@@ -29,19 +29,28 @@ export function configurationsOf(project: XcodeProject, configurationListId: str
 }
 
 /**
- * The settings dictionary of a configuration list's default configuration:
- * the one named by `defaultConfigurationName`, falling back to the first
- * configuration. Returns `undefined` when the list has no configurations
- * or the default carries no settings dictionary.
+ * The view of a configuration list's default configuration, which is the
+ * one named by `defaultConfigurationName`, falling back to the first
+ * configuration. Returns `undefined` when the list has no configurations.
+ */
+export function defaultConfigurationOf(
+  project: XcodeProject,
+  configurationListId: string | undefined,
+): BuildConfiguration | undefined {
+  const list = asDictionary(project.propertiesOfOptional(configurationListId));
+  const configurations = configurationsOf(project, configurationListId);
+  const defaultName = asString(list?.["defaultConfigurationName"]);
+  return configurations.find((configuration) => configuration.getString("name") === defaultName) ?? configurations[0];
+}
+
+/**
+ * The settings dictionary of a configuration list's default configuration
+ * (see {@link defaultConfigurationOf}). Returns `undefined` when the list
+ * has no configurations or the default carries no settings dictionary.
  */
 export function defaultConfigurationSettingsOf(
   project: XcodeProject,
   configurationListId: string | undefined,
 ): PbxprojObject | undefined {
-  const list = asDictionary(project.propertiesOfOptional(configurationListId));
-  const configurations = configurationsOf(project, configurationListId);
-  const defaultName = asString(list?.["defaultConfigurationName"]);
-  const defaultConfiguration =
-    configurations.find((configuration) => configuration.getString("name") === defaultName) ?? configurations[0];
-  return asDictionary(defaultConfiguration?.properties["buildSettings"]);
+  return asDictionary(defaultConfigurationOf(project, configurationListId)?.properties["buildSettings"]);
 }
