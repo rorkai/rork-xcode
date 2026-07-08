@@ -1,0 +1,21 @@
+//
+// Base settings shared by every target of the app.
+// Hand-maintained: keep the columns aligned when adding keys.
+//
+
+SUPPORTED_PLATFORMS                    = macosx iphonesimulator iphoneos appletvos appletvsimulator
+SWIFT_VERSION                          = 6.0
+MARKETING_VERSION                      = 2.4.1;
+
+VALID_ARCHS[sdk=macosx*]               = x86_64 arm64
+VALID_ARCHS[sdk=iphoneos*]             = arm64
+VALID_ARCHS[sdk=iphonesimulator*]      = x86_64 arm64
+VALID_ARCHS[sdk=appletv*]              = arm64
+
+// Dynamic linking uses different default copy paths per platform.
+LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]           = $(inherited) '@executable_path/../Frameworks' '@loader_path/../Frameworks'
+LD_RUNPATH_SEARCH_PATHS[sdk=iphoneos*]         = $(inherited) '@executable_path/Frameworks' '@loader_path/Frameworks'
+LD_RUNPATH_SEARCH_PATHS[sdk=iphonesimulator*]  = $(inherited) '@executable_path/Frameworks' '@loader_path/Frameworks'
+
+OTHER_SWIFT_FLAGS[config=Debug][arch=arm64] = $(inherited) -DDEBUG_ARM
+GCC_PREPROCESSOR_DEFINITIONS = $(inherited) API_BASE=1 // keep in sync with the backend

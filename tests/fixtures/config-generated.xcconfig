@@ -1,0 +1,14 @@
+// This is a generated file; do not edit or check into version control.
+TOOL_ROOT=/Users/dev/.toolchain
+TOOL_APPLICATION_PATH=/Users/dev/Example/sample-app
+PARALLEL_CODE_SIGN=true
+TOOL_TARGET=lib/main.entry
+TOOL_BUILD_DIR=build
+TOOL_BUILD_NAME=1.0.0
+TOOL_BUILD_NUMBER=7
+EXCLUDED_ARCHS[sdk=iphonesimulator*]=i386
+EXCLUDED_ARCHS[sdk=iphoneos*]=armv7
+OBFUSCATION=false
+PACKAGE_CONFIG=.tool/package_config.json
+HEADER_SEARCH_PATHS=$(inherited) "${GENERATED_ROOT}/Headers/Public" "${GENERATED_ROOT}/Headers/Public/sample"
+OTHER_LDFLAGS=$(inherited) -ObjC -l"c++" -l"sqlite3" -framework "Accelerate" -framework "CoreGraphics"

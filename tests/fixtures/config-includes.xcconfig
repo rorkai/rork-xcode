@@ -1,0 +1,7 @@
+// Debug configuration: shared defaults first, machine overrides last.
+#include "config-shared.xcconfig"
+#include? "config-local.xcconfig"
+
+ONLY_ACTIVE_ARCH = YES
+SWIFT_OPTIMIZATION_LEVEL = -Onone
+PRODUCT_BUNDLE_IDENTIFIER = com.example.sample.debug

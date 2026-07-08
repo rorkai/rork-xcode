@@ -1,4 +1,23 @@
+import { readFileSync } from "node:fs";
+
 import { buildXcconfig, parseXcconfig, Xcconfig, XcconfigParseError } from "../src/index";
+
+function fixture(name: string): string {
+  return readFileSync(new URL(`fixtures/${name}`, import.meta.url), "utf-8");
+}
+
+/**
+ * The committed fixtures mirror the file shapes found in real projects:
+ * a hand-maintained base with aligned columns and per-platform
+ * conditions, a tool-generated file without spacing around the equals
+ * signs, and an include chain with an optional local override.
+ */
+const FIXTURES = [
+  "config-app-base.xcconfig",
+  "config-generated.xcconfig",
+  "config-includes.xcconfig",
+  "config-shared.xcconfig",
+];
 
 /**
  * A hand-authored file exercising every statement kind and the format's
@@ -88,6 +107,57 @@ describe("parseXcconfig and buildXcconfig", () => {
   it("reports malformed include directives and conditions", () => {
     expect(() => parseXcconfig("#include no-quotes.xcconfig\n")).toThrow(XcconfigParseError);
     expect(() => parseXcconfig("KEY[sdk] = value\n")).toThrow(XcconfigParseError);
+  });
+});
+
+describe("xcconfig fixtures", () => {
+  it.each(FIXTURES)("%s round-trips byte for byte", (name) => {
+    const text = fixture(name);
+    expect(buildXcconfig(parseXcconfig(text))).toBe(text);
+  });
+
+  it("parses the aligned hand-maintained base with its conditions", () => {
+    const config = Xcconfig.parse(fixture("config-app-base.xcconfig"));
+
+    expect(config.get("SWIFT_VERSION")).toBe("6.0");
+    expect(config.get("MARKETING_VERSION")).toBe("2.4.1");
+    expect(config.get("GCC_PREPROCESSOR_DEFINITIONS")).toBe("$(inherited) API_BASE=1");
+
+    const doubleCondition = config.assignments().find((assignment) => assignment.key === "OTHER_SWIFT_FLAGS");
+    expect(doubleCondition?.conditions).toEqual([
+      { name: "config", value: "Debug" },
+      { name: "arch", value: "arm64" },
+    ]);
+  });
+
+  it("parses the generated file written without spacing", () => {
+    const config = Xcconfig.parse(fixture("config-generated.xcconfig"));
+
+    expect(config.get("TOOL_ROOT")).toBe("/Users/dev/.toolchain");
+    expect(config.get("OTHER_LDFLAGS")).toBe(
+      '$(inherited) -ObjC -l"c++" -l"sqlite3" -framework "Accelerate" -framework "CoreGraphics"',
+    );
+    expect(config.get("EXCLUDED_ARCHS")).toBeUndefined();
+  });
+
+  it("flattens the include chain across fixture files", () => {
+    const config = Xcconfig.parse(fixture("config-includes.xcconfig"));
+    const settings = config.settings({
+      resolveInclude: (path, optional) => {
+        if (path === "config-shared.xcconfig") {
+          return Xcconfig.parse(fixture(path));
+        }
+        // The optional local-overrides file does not exist, matching the
+        // #include? contract.
+        expect(optional).toBe(true);
+        return undefined;
+      },
+    });
+
+    expect(settings["PRODUCT_BUNDLE_IDENTIFIER"]).toBe("com.example.sample.debug");
+    expect(settings["SDKROOT"]).toBe("iphoneos");
+    expect(settings["ONLY_ACTIVE_ARCH"]).toBe("YES");
+    expect(settings["CURRENT_PROJECT_VERSION"]).toBe("42");
   });
 });
 
