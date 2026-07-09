@@ -54,6 +54,7 @@ import { AggregateTarget, LegacyTarget, NativeTarget, Target } from "./target";
 import { asDictionary, asString, ensureArray, stringItems } from "./values";
 
 import type { PbxprojObject, PbxprojValue } from "../types";
+import type { Xcconfig, XcconfigSettingsOptions } from "../xcconfig/model";
 import type { RootProjectProperties } from "./properties";
 
 /**
@@ -172,6 +173,13 @@ export class XcodeProject {
    * access, so views of the same object compare with `===`.
    */
   private readonly views = new Map<string, XcodeObject>();
+
+  /**
+   * Flattened settings of registered `.xcconfig` files, keyed by the id
+   * of the file reference configurations name in
+   * `baseConfigurationReference`.
+   */
+  private readonly xcconfigSettings = new Map<string, Record<string, string>>();
 
   private constructor(document: PbxprojObject) {
     const objects = asDictionary(document["objects"]);
@@ -302,6 +310,29 @@ export class XcodeProject {
     // derived from the same class list the factory dispatches on. The
     // compiler alone cannot make that connection.
     return view as ViewOf<I>;
+  }
+
+  /**
+   * Registers the contents of a `.xcconfig` file so build-setting reads
+   * can layer it below the configurations that are based on it. The
+   * library never touches the filesystem, so the caller loads the file
+   * and hands it over together with the file reference that
+   * configurations name in `baseConfigurationReference`. Included files
+   * take part through {@link XcconfigSettingsOptions.resolveInclude};
+   * the settings are flattened once, at registration.
+   */
+  registerXcconfig(reference: FileReference, config: Xcconfig, options: XcconfigSettingsOptions = {}): void {
+    this.xcconfigSettings.set(reference.id, config.settings(options));
+  }
+
+  /**
+   * The flattened settings registered for the `.xcconfig` file a
+   * configuration is based on, or `undefined` when the configuration
+   * names none or the file was not registered.
+   */
+  xcconfigSettingsOf(configuration: BuildConfiguration): Record<string, string> | undefined {
+    const referenceId = configuration.getString("baseConfigurationReference");
+    return referenceId == null ? undefined : this.xcconfigSettings.get(referenceId);
   }
 
   /**

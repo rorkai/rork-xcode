@@ -266,6 +266,47 @@ const text = scheme.build();
 
 Underneath, the document is a plain tree of elements with ordered attributes and children, reachable through `scheme.root` and `scheme.elements(name)`, so anything the typed surface does not cover stays one property away. `parseXcscheme` and `buildXcscheme` remain available for working with the tree directly. Attribute order is preserved and meaningful, which is how byte-identical round-trips fall out. Comments are kept, attribute values resolve the character references Xcode writes (`&quot;`, `&amp;`, `&#10;` and friends), and the writer re-escapes them identically.
 
+## Xcconfig files
+
+Build settings do not only live in the pbxproj. Projects push them into `.xcconfig` files referenced through `baseConfigurationReference`, and the xcconfig module reads and writes that format with the fidelity the rest of the library promises. The format is hand-authored with no canonical layout, so the contract here is losslessness: parsing and building an untouched file reproduces it byte for byte — comments, blank lines, column alignment, and line endings included. Malformed lines fail loudly with a typed error carrying line and column rather than being dropped, so a file the parser accepts is a file it fully understood.
+
+`Xcconfig` is the model. Reads follow the file top to bottom the way Xcode does, and writes edit single lines while leaving every other byte alone:
+
+```ts
+import { Xcconfig } from "rork-xcode";
+
+const config = Xcconfig.parse(xcconfigText);
+
+config.get("PRODUCT_BUNDLE_IDENTIFIER"); // last unconditional assignment wins
+config.set("MARKETING_VERSION", "1.2.0"); // rewrites in place, appends when new
+const settings = config.settings(); // flattened, the way Xcode reads the file
+
+const text = config.build();
+```
+
+`#include` directives are exposed as data because the library never touches the filesystem. Flattening resolves them through a caller-supplied lookup and applies each file at its directive's position, cycle-safe, so lines after an include override it exactly like textual inclusion. Position matters: an include hoisted or reordered changes what the file means, so the model never moves one.
+
+```ts
+const settings = config.settings({
+  resolveInclude: (path, optional) => loadedConfigs.get(path),
+});
+```
+
+Conditional assignments like `OTHER_LDFLAGS[sdk=iphoneos*][arch=arm64]` are parsed structurally with their conditions preserved verbatim on round-trip, unknown condition names included. Passing a build context applies them during flattening, with every condition required to match and trailing `*` wildcards honored; without a context they stay out, which mirrors reading the file with no build in mind. `$(inherited)` references splice in the value accumulated earlier in the chain and stay literal when there is none, so lower layers can still resolve them:
+
+```ts
+const settings = config.settings({
+  context: { sdk: "iphoneos", arch: "arm64", config: "Release" },
+});
+```
+
+Registering a file on the project makes `getBuildSetting` resolve through it in Xcode's order — target settings, the target's xcconfig, project settings, the project's xcconfig:
+
+```ts
+project.registerXcconfig(reference, Xcconfig.parse(text));
+app.getBuildSetting("SDKROOT"); // now sees values the xcconfig defines
+```
+
 ## Performance
 
 `rork-xcode` is measured against the pbxproj parsers on npm, [`@bacons/xcode`](https://www.npmjs.com/package/@bacons/xcode) (its `/json` parse/build entry point) and [`xcode`](https://www.npmjs.com/package/xcode) (the long-standing package used by native build tooling), on three documents: two real Xcode-written projects from the test suite and a deterministically generated five-target app with 800 source files. It is the fastest at both operations on every document, with zero dependencies.
@@ -297,7 +338,7 @@ Measured on an Apple M5 Max, Node.js 24, single thread, with `@bacons/xcode` 1.0
 - The committed fixture corpus spans project generations from Xcode 3 to Xcode 16, captured from real projects with identifiers neutralized: synchronized folders with both exception-set kinds, classic groups, variant groups, aggregate and legacy targets, reference proxies, build rules, Swift packages, and a ~100 KiB multiplatform framework project.
 - Documents already in current Xcode's layout must round-trip byte for byte; documents from other tool generations must normalize to a byte-stable fixed point with unchanged values.
 - On macOS, the suite cross-validates every fixture and its rebuilt form with `plutil`, Apple's own property list parser and the empirical ground truth for what Apple tooling accepts.
-- A corpus sweep (`pnpm corpus`) walks every Xcode project and scheme on the machine, verifies each one parses and reaches a byte-stable fixed point, exercises the object model against every project, and cross-validates a sample against plutil's own reading.
+- A corpus sweep (`pnpm corpus`) walks every Xcode project, scheme, and xcconfig on the machine, verifies each one parses and reaches a byte-stable fixed point (byte-exact losslessness for xcconfig, which has no canonical layout), exercises the object model against every project, and cross-validates a sample against plutil's own reading.
 - CI runs the full gate on Linux and macOS, and executes the built artifact on the oldest supported Node to enforce the `engines` floor.
 
 ## Releasing

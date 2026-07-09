@@ -34,8 +34,10 @@ import { parsePlist, type PlistValue } from "rork-plist";
 
 import {
   buildPbxproj,
+  buildXcconfig,
   buildXcscheme,
   parsePbxproj,
+  parseXcconfig,
   parseXcscheme,
   PbxprojParseError,
   ProductType,
@@ -117,7 +119,13 @@ const PRUNED_DIRECTORIES = new Set([
  * build directories and skipping unreadable entries. Sibling directories
  * walk concurrently, which matters on wide checkouts.
  */
-async function collectProjects(root: string, paths: string[], schemePaths: string[], limit: number): Promise<void> {
+async function collectProjects(
+  root: string,
+  paths: string[],
+  schemePaths: string[],
+  xcconfigPaths: string[],
+  limit: number,
+): Promise<void> {
   if (paths.length >= limit) {
     return;
   }
@@ -140,9 +148,11 @@ async function collectProjects(root: string, paths: string[], schemePaths: strin
       paths.push(join(root, entry.name));
     } else if (entry.isFile() && entry.name.endsWith(".xcscheme") && schemePaths.length < limit) {
       schemePaths.push(join(root, entry.name));
+    } else if (entry.isFile() && entry.name.endsWith(".xcconfig") && xcconfigPaths.length < limit) {
+      xcconfigPaths.push(join(root, entry.name));
     }
   }
-  await Promise.all(subdirectories.map((path) => collectProjects(path, paths, schemePaths, limit)));
+  await Promise.all(subdirectories.map((path) => collectProjects(path, paths, schemePaths, xcconfigPaths, limit)));
 }
 
 /** How a swept file fared, from strongest fidelity to failure. */
@@ -195,14 +205,15 @@ async function plutilAccepts(path: string): Promise<boolean> {
 const options = parseArgs(process.argv.slice(2));
 
 console.log(
-  `collecting project.pbxproj and .xcscheme files under ${options.roots.join(", ")} (max ${options.maxFiles})`,
+  `collecting project.pbxproj, .xcscheme, and .xcconfig files under ${options.roots.join(", ")} (max ${options.maxFiles})`,
 );
 const paths: string[] = [];
 const schemePaths: string[] = [];
+const xcconfigPaths: string[] = [];
 for (const root of options.roots) {
-  await collectProjects(root, paths, schemePaths, options.maxFiles);
+  await collectProjects(root, paths, schemePaths, xcconfigPaths, options.maxFiles);
 }
-console.log(`found ${paths.length} projects and ${schemePaths.length} schemes\n`);
+console.log(`found ${paths.length} projects, ${schemePaths.length} schemes, ${xcconfigPaths.length} xcconfigs\n`);
 
 const counts = new Map<Outcome, number>();
 const parsed: ParsedFile[] = [];
@@ -393,6 +404,32 @@ for (const path of schemePaths) {
   }
 }
 
+// Xcconfig sweep. The format is hand-authored with no canonical writer,
+// so the bar is lossless reproduction: parse and build must return the
+// input byte for byte. Parse failures are findings because the parser is
+// expected to read anything Xcode reads.
+const xcconfigCounts = new Map<string, number>();
+for (const path of xcconfigPaths) {
+  let text: string;
+  try {
+    text = await readFile(path, "utf-8");
+  } catch {
+    continue; // unreadable file, nothing to audit
+  }
+
+  try {
+    if (buildXcconfig(parseXcconfig(text)) === text) {
+      xcconfigCounts.set("byte-exact", (xcconfigCounts.get("byte-exact") ?? 0) + 1);
+    } else {
+      xcconfigCounts.set("lossy", (xcconfigCounts.get("lossy") ?? 0) + 1);
+      findings.push(`${path}: xcconfig round-trip is not byte-exact`);
+    }
+  } catch (error) {
+    xcconfigCounts.set("parse-failure", (xcconfigCounts.get("parse-failure") ?? 0) + 1);
+    findings.push(`${path}: xcconfig failed to parse, ${String(error)}`);
+  }
+}
+
 console.log("\n=== fidelity ===");
 for (const [outcome, count] of [...counts.entries()].toSorted((a, b) => b[1] - a[1])) {
   console.log(`  ${outcome.padEnd(20)} ${String(count).padStart(6)}`);
@@ -400,6 +437,11 @@ for (const [outcome, count] of [...counts.entries()].toSorted((a, b) => b[1] - a
 
 console.log("\n=== schemes ===");
 for (const [outcome, count] of [...schemeCounts.entries()].toSorted((a, b) => b[1] - a[1])) {
+  console.log(`  ${outcome.padEnd(20)} ${String(count).padStart(6)}`);
+}
+
+console.log("\n=== xcconfigs ===");
+for (const [outcome, count] of [...xcconfigCounts.entries()].toSorted((a, b) => b[1] - a[1])) {
   console.log(`  ${outcome.padEnd(20)} ${String(count).padStart(6)}`);
 }
 
@@ -421,5 +463,5 @@ if (findings.length > 0) {
   process.exit(1);
 }
 console.log(
-  "\nno findings: every readable project and scheme parses, round-trips stably, agrees with plutil, and survives model edits",
+  "\nno findings: every readable project, scheme, and xcconfig parses, round-trips stably, agrees with plutil, and survives model edits",
 );
