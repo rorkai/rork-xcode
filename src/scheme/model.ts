@@ -12,6 +12,7 @@
  * @module
  */
 
+import { renameFileNameStem } from "../rename";
 import { buildXcscheme } from "./build";
 import { parseXcscheme } from "./parse";
 import { isXcschemeElement } from "./types";
@@ -188,6 +189,9 @@ export class Xcscheme {
    * changed, so callers can skip rewriting untouched files.
    */
   renameTarget(oldName: string, newName: string): boolean {
+    if (oldName === newName) {
+      return false;
+    }
     let changed = false;
     for (const reference of this.buildableReferences()) {
       if (reference.blueprintName === oldName) {
@@ -195,7 +199,7 @@ export class Xcscheme {
         changed = true;
       }
       const buildableName = reference.buildableName;
-      const renamed = buildableName == null ? undefined : renameStem(buildableName, oldName, newName);
+      const renamed = buildableName == null ? undefined : renameFileNameStem(buildableName, oldName, newName);
       if (renamed != null) {
         reference.buildableName = renamed;
         changed = true;
@@ -211,6 +215,9 @@ export class Xcscheme {
    * exactly. Returns whether anything changed.
    */
   renameContainer(oldProjectName: string, newProjectName: string): boolean {
+    if (oldProjectName === newProjectName) {
+      return false;
+    }
     let changed = false;
     for (const reference of this.buildableReferences()) {
       if (reference.referencedContainer === `container:${oldProjectName}.xcodeproj`) {
@@ -220,22 +227,6 @@ export class Xcscheme {
     }
     return changed;
   }
-}
-
-/**
- * Renames a file name whose stem is the target name, keeping the
- * extension, so `OldApp` and `OldApp.app` both rename. A name whose stem
- * merely starts with the old name belongs to another target and returns
- * `undefined`.
- */
-function renameStem(fileName: string, oldName: string, newName: string): string | undefined {
-  if (fileName === oldName) {
-    return newName;
-  }
-  if (fileName.startsWith(`${oldName}.`)) {
-    return newName + fileName.slice(oldName.length);
-  }
-  return undefined;
 }
 
 /**

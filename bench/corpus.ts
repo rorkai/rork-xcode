@@ -321,6 +321,11 @@ for (const file of parsed) {
         continue;
       }
       project.renameTarget(app, originalName);
+      const renamedBack = project.build();
+      if (buildPbxproj(parsePbxproj(renamedBack) as PbxprojObject) !== renamedBack) {
+        findings.push(`${file.path}: document after renaming back is not a fixed point`);
+        continue;
+      }
     }
 
     modelMutated += 1;

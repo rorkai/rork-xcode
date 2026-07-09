@@ -15,6 +15,7 @@
 import { buildPbxproj } from "../build";
 import { XcodeModelError } from "../errors";
 import { parsePbxproj } from "../parse";
+import { renameFileNameStem } from "../rename";
 import { generateObjectId } from "../uuid";
 import { pruneOrphanObjects, validateProject, type ProjectIssue } from "./doctor";
 import { DEPLOYMENT_TARGET_KEY, Isa, PRODUCT_FILE_INFO, ProductType, type ApplePlatform, type IsaValue } from "./isa";
@@ -777,15 +778,7 @@ export class XcodeProject {
         if (settings.TEST_TARGET_NAME === oldName) {
           settings.TEST_TARGET_NAME = newName;
         }
-        for (const key of ["TEST_HOST", "BUNDLE_LOADER"]) {
-          const value = asString(settings[key]);
-          if (value != null) {
-            const rewritten = renamePathSegments(value, oldName, newName);
-            if (rewritten !== value) {
-              settings[key] = rewritten;
-            }
-          }
-        }
+        renameHostPathSettings(settings, oldName, newName);
       }
     }
   }
@@ -939,23 +932,6 @@ function joinPath(prefix: string, segment: string): string {
 }
 
 /**
- * Renames a file name whose stem is the target name, keeping the
- * extension. `SampleApp` and `SampleApp.app` rename, and so does a
- * multi-part extension like `SampleApp.app.dSYM`. A name whose stem
- * merely starts with the old name, like `SampleAppTests.xctest`, is a
- * different target's product and returns `undefined`.
- */
-function renameFileNameStem(fileName: string, oldName: string, newName: string): string | undefined {
-  if (fileName === oldName) {
-    return newName;
-  }
-  if (fileName.startsWith(`${oldName}.`)) {
-    return newName + fileName.slice(oldName.length);
-  }
-  return undefined;
-}
-
-/**
  * Renames the segments of a path-valued build setting that name the
  * target or one of its products. Settings like `TEST_HOST` embed the
  * product path as
@@ -968,6 +944,25 @@ function renamePathSegments(value: string, oldName: string, newName: string): st
     .split("/")
     .map((segment) => renameFileNameStem(segment, oldName, newName) ?? segment)
     .join("/");
+}
+
+/**
+ * Renames the target name inside the host-path settings of one
+ * configuration. `TEST_HOST` and `BUNDLE_LOADER` carry the hosting
+ * product's path, so their segments rename the way the product file
+ * reference does.
+ */
+function renameHostPathSettings(settings: PbxprojObject, oldName: string, newName: string): void {
+  for (const key of ["TEST_HOST", "BUNDLE_LOADER"]) {
+    const value = asString(settings[key]);
+    if (value == null) {
+      continue;
+    }
+    const rewritten = renamePathSegments(value, oldName, newName);
+    if (rewritten !== value) {
+      settings[key] = rewritten;
+    }
+  }
 }
 
 /**
