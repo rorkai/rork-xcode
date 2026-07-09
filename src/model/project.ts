@@ -730,8 +730,13 @@ export class XcodeProject {
     }
 
     const oldName = target.name;
+    if (oldName === newName) {
+      return;
+    }
     target.set("name", newName);
-    if (oldName == null || oldName === newName) {
+    // A target with no name gains one, and there is no old name for the
+    // rest of the document to know it by.
+    if (oldName == null) {
       return;
     }
 
