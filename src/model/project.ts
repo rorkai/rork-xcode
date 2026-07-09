@@ -705,6 +705,92 @@ export class XcodeProject {
   }
 
   /**
+   * Renames a target and every place the document knows it by name. That
+   * covers the target's `name` and `productName`, its product file
+   * reference (`OldName.app` becomes `NewName.app`, whatever the
+   * extension), the `remoteInfo` of container item proxies pointing at
+   * the target, `TEST_TARGET_NAME` settings naming it, and the path
+   * segments of `TEST_HOST` and `BUNDLE_LOADER` settings that name the
+   * target or its product. A `PRODUCT_NAME` of the target's own
+   * configurations is rewritten only when it spells the old name
+   * literally; the usual `$(TARGET_NAME)` follows by itself.
+   *
+   * Scheme files live outside the pbxproj, so buildable references are
+   * renamed separately through `Xcscheme.renameTarget`. On-disk renames
+   * (source folders, entitlements files) and the group paths pointing at
+   * those folders stay with the caller, which is also where sibling
+   * targets like `OldNameTests` are further `renameTarget` calls.
+   *
+   * @throws XcodeModelError when the target belongs to another project.
+   */
+  renameTarget(target: Target, newName: string): void {
+    if (target.project !== this) {
+      throw new XcodeModelError("Cannot rename a target that belongs to another project");
+    }
+
+    const oldName = target.name;
+    target.set("name", newName);
+    if (oldName == null || oldName === newName) {
+      return;
+    }
+
+    if (target.getString("productName") === oldName) {
+      target.set("productName", newName);
+    }
+
+    const product = this.get(target.getString("productReference"));
+    if (product != null) {
+      for (const key of ["path", "name"]) {
+        const fileName = product.getString(key);
+        const renamed = fileName == null ? undefined : renameFileNameStem(fileName, oldName, newName);
+        if (renamed != null) {
+          product.set(key, renamed);
+        }
+      }
+    }
+
+    for (const configuration of target.buildConfigurations()) {
+      const settings = configuration.buildSettings;
+      if (settings?.PRODUCT_NAME === oldName) {
+        settings.PRODUCT_NAME = newName;
+      }
+    }
+
+    for (const [, view] of this.objects()) {
+      // Proxies resolve the target by id, so only the ones actually
+      // pointing here are touched, even when another target shares the
+      // old display name.
+      if (
+        ContainerItemProxy.is(view) &&
+        view.getString("remoteGlobalIDString") === target.id &&
+        view.remoteInfo === oldName
+      ) {
+        view.set("remoteInfo", newName);
+      }
+
+      // Test bundles of any target may name this one as their host.
+      if (BuildConfiguration.is(view)) {
+        const settings = view.buildSettings;
+        if (settings == null) {
+          continue;
+        }
+        if (settings.TEST_TARGET_NAME === oldName) {
+          settings.TEST_TARGET_NAME = newName;
+        }
+        for (const key of ["TEST_HOST", "BUNDLE_LOADER"]) {
+          const value = asString(settings[key]);
+          if (value != null) {
+            const rewritten = renamePathSegments(value, oldName, newName);
+            if (rewritten !== value) {
+              settings[key] = rewritten;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /**
    * Finds a file reference by its project-relative path, resolving each
    * reference's location through the group tree from the main group
    * (nested group `path` components join with `/`).
@@ -850,6 +936,38 @@ export type BuildPhaseOf<I extends string> = I extends keyof ViewByIsa ? Extract
  */
 function joinPath(prefix: string, segment: string): string {
   return prefix === "" ? segment : `${prefix}/${segment}`;
+}
+
+/**
+ * Renames a file name whose stem is the target name, keeping the
+ * extension. `SampleApp` and `SampleApp.app` rename, and so does a
+ * multi-part extension like `SampleApp.app.dSYM`. A name whose stem
+ * merely starts with the old name, like `SampleAppTests.xctest`, is a
+ * different target's product and returns `undefined`.
+ */
+function renameFileNameStem(fileName: string, oldName: string, newName: string): string | undefined {
+  if (fileName === oldName) {
+    return newName;
+  }
+  if (fileName.startsWith(`${oldName}.`)) {
+    return newName + fileName.slice(oldName.length);
+  }
+  return undefined;
+}
+
+/**
+ * Renames the segments of a path-valued build setting that name the
+ * target or one of its products. Settings like `TEST_HOST` embed the
+ * product path as
+ * `$(BUILT_PRODUCTS_DIR)/SampleApp.app/.../SampleApp`, so each segment
+ * is matched whole against the target name. Substring occurrences inside
+ * unrelated segments stay untouched.
+ */
+function renamePathSegments(value: string, oldName: string, newName: string): string {
+  return value
+    .split("/")
+    .map((segment) => renameFileNameStem(segment, oldName, newName) ?? segment)
+    .join("/");
 }
 
 /**

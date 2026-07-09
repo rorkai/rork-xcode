@@ -667,6 +667,84 @@ describe("removal", () => {
   });
 });
 
+describe("target rename", () => {
+  it("renames the app target everywhere the document names it", () => {
+    const project = openApp();
+    const app = project.findMainAppTarget("ios");
+    assert(app);
+
+    project.renameTarget(app, "Rocket");
+
+    expect(app.name).toBe("Rocket");
+    expect(app.getString("productName")).toBe("Rocket");
+    expect(app.productReference?.path).toBe("Rocket.app");
+
+    // Test bundles keep working against the renamed host: the unit test
+    // host path renames per segment, the UI test target name renames
+    // whole, and the dependency proxies' display names follow.
+    const tests = project.findTarget("SampleAppTests");
+    const uiTests = project.findTarget("SampleAppUITests");
+    assert(tests && uiTests);
+    expect(tests.getBuildSetting("TEST_HOST")).toBe(
+      "$(BUILT_PRODUCTS_DIR)/Rocket.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Rocket",
+    );
+    expect(uiTests.getBuildSetting("TEST_TARGET_NAME")).toBe("Rocket");
+    expect(tests.dependencies()[0]?.targetProxy()?.remoteInfo).toBe("Rocket");
+
+    // Sibling products own their names; the stem match must not treat
+    // SampleAppTests.xctest as the renamed target's product.
+    expect(tests.productReference?.path).toBe("SampleAppTests.xctest");
+
+    // PRODUCT_NAME stays $(TARGET_NAME) and follows by itself.
+    expect(app.buildConfigurations()[0]?.buildSettings?.PRODUCT_NAME).toBe("$(TARGET_NAME)");
+
+    // Comments regenerate from the new names, and the result is a stable
+    // canonical document.
+    const text = project.build();
+    expect(text).toContain("/* Rocket.app */");
+    expect(text).not.toContain("SampleApp.app");
+    expect(XcodeProject.parse(text).build()).toBe(text);
+  });
+
+  it("renames a test target without touching its host", () => {
+    const project = openApp();
+    const tests = project.findTarget("SampleAppTests");
+    assert(tests);
+
+    project.renameTarget(tests, "RocketTests");
+
+    expect(tests.name).toBe("RocketTests");
+    expect(tests.productReference?.path).toBe("RocketTests.xctest");
+
+    // The app target and the settings naming it stay as they were, and
+    // the indirection through $(TEST_HOST) is not mistaken for a path.
+    const app = project.findMainAppTarget("ios");
+    assert(app);
+    expect(app.name).toBe("SampleApp");
+    expect(tests.getBuildSetting("TEST_HOST")).toBe(
+      "$(BUILT_PRODUCTS_DIR)/SampleApp.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/SampleApp",
+    );
+    expect(tests.getBuildSetting("BUNDLE_LOADER")).toBe("$(TEST_HOST)");
+  });
+
+  it("leaves the document byte-identical when the name is unchanged", () => {
+    const project = openApp();
+    const app = project.findMainAppTarget("ios");
+    assert(app);
+    const before = project.build();
+
+    project.renameTarget(app, "SampleApp");
+    expect(project.build()).toBe(before);
+  });
+
+  it("rejects targets that belong to another project", () => {
+    const project = openApp();
+    const foreign = openApp().findMainAppTarget("ios");
+    assert(foreign);
+    expect(() => project.renameTarget(foreign, "Rocket")).toThrow(XcodeModelError);
+  });
+});
+
 describe("aggregate targets, legacy targets, and exotic references", () => {
   it("types aggregate targets and gives them the shared target surface", () => {
     const project = openApp();

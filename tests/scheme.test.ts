@@ -216,3 +216,42 @@ describe("editing", () => {
     expect(buildRef.attributes["BlueprintName"]).toBe("DemoApp");
   });
 });
+
+describe("target rename", () => {
+  it("renames one target's references and leaves siblings alone", () => {
+    const scheme = Xcscheme.parse(fixture("scheme-app.xcscheme"));
+
+    expect(scheme.renameTarget("DemoApp", "Rocket")).toBe(true);
+
+    const built = scheme.build();
+    expect(built).toContain('BlueprintName = "Rocket"');
+    expect(built).toContain('BuildableName = "Rocket.app"');
+    expect(built).not.toContain('BlueprintName = "DemoApp"');
+    // The test bundle is a different target; its stem must not rename.
+    expect(built).toContain('BlueprintName = "DemoAppTests"');
+    expect(built).toContain('BuildableName = "DemoAppTests.xctest"');
+    // Containers name the .xcodeproj directory, not the target.
+    expect(built).toContain('ReferencedContainer = "container:DemoApp.xcodeproj"');
+  });
+
+  it("reports when no reference matched", () => {
+    const scheme = Xcscheme.parse(fixture("scheme-app.xcscheme"));
+    const before = scheme.build();
+
+    expect(scheme.renameTarget("Absent", "Rocket")).toBe(false);
+    expect(scheme.build()).toBe(before);
+  });
+
+  it("rewrites containers after the project directory renames", () => {
+    const scheme = Xcscheme.parse(fixture("scheme-app.xcscheme"));
+
+    expect(scheme.renameContainer("DemoApp", "Rocket")).toBe(true);
+    expect(scheme.renameContainer("DemoApp", "Rocket")).toBe(false);
+
+    const built = scheme.build();
+    expect(built).toContain('ReferencedContainer = "container:Rocket.xcodeproj"');
+    expect(built).not.toContain("container:DemoApp.xcodeproj");
+    // Target names stay; renaming the container is a separate move.
+    expect(built).toContain('BlueprintName = "DemoApp"');
+  });
+});
