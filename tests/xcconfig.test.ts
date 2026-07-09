@@ -128,6 +128,15 @@ describe("xcconfig fixtures", () => {
       { name: "config", value: "Debug" },
       { name: "arch", value: "arm64" },
     ]);
+
+    // Under a device build context the per-SDK assignments apply, and an
+    // inherited reference with no prior value in the chain stays literal.
+    const settings = config.settings({ context: { sdk: "iphoneos", arch: "arm64", config: "Debug" } });
+    expect(settings["VALID_ARCHS"]).toBe("arm64");
+    expect(settings["OTHER_SWIFT_FLAGS"]).toBe("$(inherited) -DDEBUG_ARM");
+    expect(settings["LD_RUNPATH_SEARCH_PATHS"]).toBe(
+      "$(inherited) '@executable_path/Frameworks' '@loader_path/Frameworks'",
+    );
   });
 
   it("parses the generated file written without spacing", () => {
@@ -243,5 +252,52 @@ describe("Xcconfig", () => {
     const config = Xcconfig.parse("A = 1\r\nB = 2\r\n");
     config.set("C", "3");
     expect(config.build()).toBe("A = 1\r\nB = 2\r\nC = 3\r\n");
+  });
+
+  it("matches conditional assignments against a build context", () => {
+    const config = Xcconfig.parse(
+      [
+        "FLAGS = base",
+        "FLAGS[sdk=iphoneos*] = device",
+        "FLAGS[sdk=iphonesimulator*] = simulator",
+        "FLAGS[sdk=iphoneos*][arch=arm64] = device-arm64",
+        "WILDCARD[sdk=*] = any-sdk",
+        "TUNED[config=Debug] = debug-only",
+        "EXOTIC[dest=platform] = never",
+        "",
+      ].join("\n"),
+    );
+
+    // Every condition of an assignment must match, wildcards included.
+    expect(config.settings({ context: { sdk: "iphoneos", arch: "arm64", config: "Release" } })).toEqual({
+      FLAGS: "device-arm64",
+      WILDCARD: "any-sdk",
+    });
+    expect(config.settings({ context: { sdk: "iphonesimulator" } })).toEqual({
+      FLAGS: "simulator",
+      WILDCARD: "any-sdk",
+    });
+    expect(config.settings({ context: { config: "Debug" } })).toEqual({
+      FLAGS: "base",
+      TUNED: "debug-only",
+    });
+    // Without a context, conditional assignments stay out entirely.
+    expect(config.settings()).toEqual({ FLAGS: "base" });
+  });
+
+  it("splices inherited references within the chain and keeps them literal otherwise", () => {
+    const shared = Xcconfig.parse("OTHER_LDFLAGS = -lbase\n");
+    const config = Xcconfig.parse(
+      '#include "shared.xcconfig"\nOTHER_LDFLAGS = $(inherited) -lextra\nOTHER_CFLAGS = ${inherited} -DX\n',
+    );
+
+    const settings = config.settings({
+      resolveInclude: (path) => (path === "shared.xcconfig" ? shared : undefined),
+    });
+
+    // A prior value in the chain is spliced in; with none, the reference
+    // stays literal so layers below the file can still resolve it.
+    expect(settings["OTHER_LDFLAGS"]).toBe("-lbase -lextra");
+    expect(settings["OTHER_CFLAGS"]).toBe("${inherited} -DX");
   });
 });

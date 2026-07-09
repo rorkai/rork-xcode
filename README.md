@@ -268,9 +268,9 @@ Underneath, the document is a plain tree of elements with ordered attributes and
 
 ## Xcconfig files
 
-Build settings do not only live in the pbxproj. Projects push them into `.xcconfig` files referenced through `baseConfigurationReference`, and the xcconfig module reads and writes that format with the fidelity the rest of the library promises. The format is hand-authored with no canonical layout, so the contract here is losslessness: parsing and building an untouched file reproduces it byte for byte, comments and blank lines included, and malformed input fails with a typed error carrying line and column.
+Build settings do not only live in the pbxproj. Projects push them into `.xcconfig` files referenced through `baseConfigurationReference`, and the xcconfig module reads and writes that format with the fidelity the rest of the library promises. The format is hand-authored with no canonical layout, so the contract here is losslessness: parsing and building an untouched file reproduces it byte for byte — comments, blank lines, column alignment, and line endings included. Malformed lines fail loudly with a typed error carrying line and column rather than being dropped, so a file the parser accepts is a file it fully understood.
 
-`Xcconfig` is the model:
+`Xcconfig` is the model. Reads follow the file top to bottom the way Xcode does, and writes edit single lines while leaving every other byte alone:
 
 ```ts
 import { Xcconfig } from "rork-xcode";
@@ -284,11 +284,19 @@ const settings = config.settings(); // flattened, the way Xcode reads the file
 const text = config.build();
 ```
 
-`#include` directives are exposed as data because the library never touches the filesystem. Flattening resolves them through a caller-supplied lookup, at the directive's position and cycle-safe, so lines after an include override it exactly like textual inclusion:
+`#include` directives are exposed as data because the library never touches the filesystem. Flattening resolves them through a caller-supplied lookup and applies each file at its directive's position, cycle-safe, so lines after an include override it exactly like textual inclusion. Position matters: an include hoisted or reordered changes what the file means, so the model never moves one.
 
 ```ts
 const settings = config.settings({
   resolveInclude: (path, optional) => loadedConfigs.get(path),
+});
+```
+
+Conditional assignments like `OTHER_LDFLAGS[sdk=iphoneos*][arch=arm64]` are parsed structurally with their conditions preserved verbatim on round-trip, unknown condition names included. Passing a build context applies them during flattening, with every condition required to match and trailing `*` wildcards honored; without a context they stay out, which mirrors reading the file with no build in mind. `$(inherited)` references splice in the value accumulated earlier in the chain and stay literal when there is none, so lower layers can still resolve them:
+
+```ts
+const settings = config.settings({
+  context: { sdk: "iphoneos", arch: "arm64", config: "Release" },
 });
 ```
 
@@ -298,8 +306,6 @@ Registering a file on the project makes `getBuildSetting` resolve through it in 
 project.registerXcconfig(reference, Xcconfig.parse(text));
 app.getBuildSetting("SDKROOT"); // now sees values the xcconfig defines
 ```
-
-Conditional assignments like `OTHER_LDFLAGS[sdk=iphoneos*]` are parsed with their conditions and preserved on round-trip. They are reachable through `config.assignments()` and deliberately excluded from flattening, which mirrors reading the file without a concrete build context.
 
 ## Performance
 

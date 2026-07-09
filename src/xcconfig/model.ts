@@ -26,6 +26,22 @@ import type { XcconfigAssignment, XcconfigDocument, XcconfigInclude } from "./ty
 export type XcconfigIncludeResolver = (path: string, optional: boolean) => Xcconfig | undefined;
 
 /**
+ * The build context conditional assignments are matched against. Keys
+ * mirror the condition names of the format, so `KEY[sdk=iphoneos*]`
+ * matches against {@link sdk}.
+ */
+export interface XcconfigBuildContext {
+  /** The SDK identifier, for example `iphoneos` or `appletvsimulator`. */
+  sdk?: string;
+
+  /** The architecture, for example `arm64`. */
+  arch?: string;
+
+  /** The configuration name, for example `Debug`. */
+  config?: string;
+}
+
+/**
  * Options for {@link Xcconfig.settings}.
  */
 export interface XcconfigSettingsOptions {
@@ -34,6 +50,42 @@ export interface XcconfigSettingsOptions {
    * resolver, includes contribute nothing.
    */
   resolveInclude?: XcconfigIncludeResolver;
+
+  /**
+   * The build context conditional assignments apply under. An assignment
+   * takes part when every one of its conditions matches, with trailing
+   * `*` wildcards honored the way Xcode matches SDK names. Without a
+   * context, and for dimensions the context leaves out, conditional
+   * assignments are skipped.
+   */
+  context?: XcconfigBuildContext;
+}
+
+/**
+ * Whether a condition value matches a context value. A bare `*` matches
+ * anything, a trailing `*` matches by prefix, and anything else matches
+ * exactly.
+ */
+function matchesCondition(conditionValue: string, contextValue: string): boolean {
+  if (conditionValue === "*") {
+    return true;
+  }
+  if (conditionValue.endsWith("*")) {
+    return contextValue.startsWith(conditionValue.slice(0, -1));
+  }
+  return conditionValue === contextValue;
+}
+
+/**
+ * Splices a prior value into `$(inherited)` and `${inherited}`
+ * references. With no prior value the references stay literal, because
+ * they then refer to layers below the file chain, which resolve later.
+ */
+function spliceInherited(value: string, prior: string | undefined): string {
+  if (prior == null) {
+    return value;
+  }
+  return value.replaceAll("$(inherited)", prior).replaceAll("${inherited}", prior);
 }
 
 /**
@@ -180,7 +232,13 @@ export class Xcconfig {
    * Flattens the file into a settings dictionary the way Xcode reads it:
    * top to bottom with later assignments winning, and every `#include`
    * contributing its settings at the point of the directive, so lines
-   * after an include override it. Conditional assignments are skipped.
+   * after an include override it.
+   *
+   * Conditional assignments apply when every condition matches
+   * {@link XcconfigSettingsOptions.context}; without a context they are
+   * skipped. `$(inherited)` references splice in the value accumulated
+   * earlier in the chain, and stay literal when there is none, since
+   * they then refer to layers below the file, which resolve later.
    *
    * Includes only take part when {@link XcconfigSettingsOptions.resolveInclude}
    * is provided, since the library never touches the filesystem itself.
@@ -192,6 +250,16 @@ export class Xcconfig {
     const merged: Record<string, string> = {};
     const visitedConfigs = new Set<Xcconfig>();
     const visitedPaths = new Set<string>();
+    const context = options.context;
+
+    const applies = (statement: XcconfigAssignment): boolean =>
+      statement.conditions.every((condition) => {
+        const contextValue =
+          condition.name === "sdk" || condition.name === "arch" || condition.name === "config"
+            ? context?.[condition.name]
+            : undefined;
+        return contextValue != null && matchesCondition(condition.value, contextValue);
+      });
 
     const visit = (config: Xcconfig): void => {
       if (visitedConfigs.has(config)) {
@@ -208,8 +276,8 @@ export class Xcconfig {
           if (included != null) {
             visit(included);
           }
-        } else if (statement.kind === "assignment" && statement.conditions.length === 0) {
-          merged[statement.key] = statement.value;
+        } else if (statement.kind === "assignment" && applies(statement)) {
+          merged[statement.key] = spliceInherited(statement.value, merged[statement.key]);
         }
       }
     };
