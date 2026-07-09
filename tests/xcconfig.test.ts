@@ -285,6 +285,21 @@ describe("Xcconfig", () => {
     expect(config.settings()).toEqual({ FLAGS: "base" });
   });
 
+  it("re-applies a file included again later, like pasting its text twice", () => {
+    const flags = Xcconfig.parse("OTHER_LDFLAGS = $(inherited) -lcommon\n");
+    const config = Xcconfig.parse(
+      ['#include "flags.xcconfig"', "OTHER_LDFLAGS = -lmine", '#include "flags.xcconfig"', ""].join("\n"),
+    );
+
+    const settings = config.settings({
+      resolveInclude: (path) => (path === "flags.xcconfig" ? flags : undefined),
+    });
+
+    // The second include re-applies at its position and splices the value
+    // accumulated so far, so the local assignment is not the last word.
+    expect(settings["OTHER_LDFLAGS"]).toBe("-lmine -lcommon");
+  });
+
   it("splices inherited references within the chain and keeps them literal otherwise", () => {
     const shared = Xcconfig.parse("OTHER_LDFLAGS = -lbase\n");
     const config = Xcconfig.parse(

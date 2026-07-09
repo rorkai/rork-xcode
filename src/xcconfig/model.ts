@@ -19,9 +19,10 @@ import type { XcconfigAssignment, XcconfigDocument, XcconfigInclude } from "./ty
  * `undefined` skips the include, which is always legal for the
  * `#include?` form and mirrors a missing file for the strict form.
  *
- * Cycles are detected by the include path exactly as written, so a file
- * reachable through two different spellings of the same path is applied
- * once per spelling. Resolvers that memoize per path avoid that.
+ * Cycles are detected while a file is being expanded, by the include
+ * path exactly as written and by model instance. A cycle reached through
+ * two different spellings of the same path escapes the path check, so
+ * resolvers that memoize per path make the instance check catch it.
  */
 export type XcconfigIncludeResolver = (path: string, optional: boolean) => Xcconfig | undefined;
 
@@ -242,14 +243,15 @@ export class Xcconfig {
    *
    * Includes only take part when {@link XcconfigSettingsOptions.resolveInclude}
    * is provided, since the library never touches the filesystem itself.
-   * Each include path is followed once, and a model instance is applied
-   * once, so cyclic includes terminate even when the resolver parses a
-   * fresh instance per call.
+   * A file included again later re-applies, exactly like pasting its text
+   * a second time. Only re-entry while a file is still being expanded is
+   * skipped, tracked by include path and by instance, so cyclic includes
+   * terminate even when the resolver parses a fresh instance per call.
    */
   settings(options: XcconfigSettingsOptions = {}): Record<string, string> {
     const merged: Record<string, string> = {};
-    const visitedConfigs = new Set<Xcconfig>();
-    const visitedPaths = new Set<string>();
+    const pathStack = new Set<string>();
+    const instanceStack = new Set<Xcconfig>();
     const context = options.context;
 
     const applies = (statement: XcconfigAssignment): boolean =>
@@ -262,24 +264,26 @@ export class Xcconfig {
       });
 
     const visit = (config: Xcconfig): void => {
-      if (visitedConfigs.has(config)) {
+      if (instanceStack.has(config)) {
         return;
       }
-      visitedConfigs.add(config);
+      instanceStack.add(config);
       for (const statement of config.document.statements) {
         if (statement.kind === "include") {
-          if (visitedPaths.has(statement.path)) {
+          if (pathStack.has(statement.path)) {
             continue;
           }
-          visitedPaths.add(statement.path);
           const included = options.resolveInclude?.(statement.path, statement.optional);
           if (included != null) {
+            pathStack.add(statement.path);
             visit(included);
+            pathStack.delete(statement.path);
           }
         } else if (statement.kind === "assignment" && applies(statement)) {
           merged[statement.key] = spliceInherited(statement.value, merged[statement.key]);
         }
       }
+      instanceStack.delete(config);
     };
 
     visit(this);
