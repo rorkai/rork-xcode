@@ -17,8 +17,9 @@
  * The print-back rule is what keeps round-trips faithful. Any literal the
  * conversion would reshape stays a string, so serializing never changes a
  * scalar's bytes. Leading-zero runs like `0755` would corrupt file modes,
- * trailing-zero decimals like `5.0` would drop the zero build settings are
- * written with, bare-dot decimals like `.5` would grow a leading zero, and
+ * trailing-zero decimals like `5.0` would drop the zero that build
+ * settings are written with, bare-dot decimals like `.5` would grow a
+ * leading zero, and
  * digit runs beyond `Number.MAX_SAFE_INTEGER` would lose precision (a
  * 24-character identifier can be all digits), so all of these parse as
  * strings.
