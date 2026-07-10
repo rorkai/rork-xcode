@@ -9,19 +9,19 @@
  * - `( item, item, ... )` parses to a {@link PbxprojArray}.
  * - `<48656c6c6f>` data runs parse to `Uint8Array`.
  * - Unquoted integers and decimals (`46`, `3.14`, `-12`) parse to `number`
- *   under one print-back rule: the literal converts exactly when the number
- *   formats back to the identical text.
+ *   under one print-back rule, where the literal converts exactly when the
+ *   number formats back to the identical text.
  * - Everything else (quoted text, identifiers, uuids, paths) parses to
  *   `string`.
  *
- * The print-back rule is what keeps round-trips faithful: any literal the
+ * The print-back rule is what keeps round-trips faithful. Any literal the
  * conversion would reshape stays a string, so serializing never changes a
  * scalar's bytes. Leading-zero runs like `0755` would corrupt file modes,
  * trailing-zero decimals like `5.0` would drop the zero build settings are
  * written with, bare-dot decimals like `.5` would grow a leading zero, and
  * digit runs beyond `Number.MAX_SAFE_INTEGER` would lose precision (a
- * 24-character identifier can be all digits); all of these therefore parse
- * as strings.
+ * 24-character identifier can be all digits), so all of these parse as
+ * strings.
  *
  * @module
  */
@@ -29,7 +29,7 @@
 /**
  * A value representable in a `project.pbxproj` document.
  *
- * Notably absent are booleans and null: the format has no notation for
+ * Notably absent are booleans and null. The format has no notation for
  * either, and Xcode models flags as the strings `"YES"` and `"NO"`.
  */
 export type PbxprojValue = string | number | Uint8Array | PbxprojArray | PbxprojObject;
@@ -37,7 +37,7 @@ export type PbxprojValue = string | number | Uint8Array | PbxprojArray | Pbxproj
 /**
  * A `( ... )` list: an ordered array of values.
  *
- * This is a plain JavaScript array; the interface exists only to give the
+ * This is a plain JavaScript array. The interface exists only to give the
  * recursive {@link PbxprojValue} type a name.
  */
 export interface PbxprojArray extends Array<PbxprojValue> {}

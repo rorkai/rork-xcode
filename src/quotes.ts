@@ -15,8 +15,8 @@
 const UNQUOTED_SAFE_PATTERN = /^[A-Za-z0-9_$/:.]+$/u;
 
 /**
- * Whether the value can render without quotes: every character is in the
- * unquoted-safe alphabet and the string is not empty.
+ * Whether the value can render without quotes, meaning every character is
+ * in the unquoted-safe alphabet and the string is not empty.
  *
  * Quoting decisions scan every string a document carries, and many of those
  * strings are substring slices of the source text. The regex engine flattens
@@ -29,7 +29,7 @@ export function isSafeUnquoted(value: string): boolean {
 
 /**
  * Whether the string contains characters that require escape sequences
- * inside a quoted string: control characters, `"`, `\`, or DEL.
+ * inside a quoted string, meaning control characters, `"`, `\`, or DEL.
  */
 export function needsEscaping(value: string): boolean {
   for (let i = 0; i < value.length; i++) {
@@ -42,8 +42,8 @@ export function needsEscaping(value: string): boolean {
 }
 
 /**
- * Escapes special characters for a quoted string: the named C-style escapes
- * plus `\Uxxxx` for remaining control characters.
+ * Escapes special characters for a quoted string, using the named C-style
+ * escapes plus `\Uxxxx` for remaining control characters.
  */
 export function escapeString(value: string): string {
   let result = "";
@@ -108,7 +108,7 @@ export function ensureQuotes(value: string): string {
 }
 
 /**
- * Renders binary data as an uppercase hex run: `<DEADBEEF>`.
+ * Renders binary data as an uppercase hex run, for example `<DEADBEEF>`.
  */
 export function formatData(data: Uint8Array): string {
   let hex = "";

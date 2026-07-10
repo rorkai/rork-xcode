@@ -2,7 +2,7 @@
  * Object model for Xcode build configuration files (`.xcconfig`).
  *
  * {@link Xcconfig} wraps a parsed document the way `XcodeProject` wraps a
- * pbxproj: the document stays the single source of truth, reads and
+ * pbxproj. The document stays the single source of truth, reads and
  * writes go through it, and {@link Xcconfig.build} emits it back with
  * untouched lines preserved byte for byte.
  *

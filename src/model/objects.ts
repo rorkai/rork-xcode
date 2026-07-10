@@ -2,9 +2,9 @@
  * Typed views over the document object kinds that are not targets, from
  * groups and build phases to version groups and reference proxies.
  *
- * Each class adds the accessors and mutations its kind supports; everything
- * ultimately reads and writes the raw dictionaries through the base class,
- * so mixing model calls with direct property access stays safe.
+ * Each class adds the accessors and mutations its kind supports.
+ * Everything ultimately reads and writes the raw dictionaries through the
+ * base class, so mixing model calls with direct property access stays safe.
  *
  * @module
  */
@@ -111,7 +111,7 @@ export class Group<Properties extends GroupProperties = GroupProperties> extends
    * it to the group's children.
    *
    * The reference's `lastKnownFileType` derives from the file extension
-   * when it is a known kind; otherwise the reference carries no type and
+   * when it is a known kind. Otherwise the reference carries no type and
    * Xcode re-derives one on open.
    *
    * @param path File path relative to the group, for example
@@ -156,8 +156,8 @@ export class BuildPhase<
 > extends XcodeObject<Properties> {
   /**
    * The phase's display name, when it carries an explicit one. Xcode names
-   * copy-files and shell-script phases; the standard phases derive their
-   * names from their isa.
+   * copy-files and shell-script phases, while the standard phases derive
+   * their names from their isa.
    */
   get name(): string | undefined {
     return this.getString("name");
@@ -206,7 +206,7 @@ export class BuildPhase<
    * @param reference The file reference or package product the build file
    *   should point at.
    * @param options.referenceKey Which build-file field carries the
-   *   reference: `fileRef` for file references (the default) or
+   *   reference, either `fileRef` for file references (the default) or
    *   `productRef` for Swift package products.
    * @param options.settings Optional per-file settings, for example
    *   `{ ATTRIBUTES: ["RemoveHeadersOnCopy"] }`.
@@ -344,7 +344,7 @@ export class BuildFile extends XcodeObject<BuildFileProperties> {
   /**
    * The view of the file reference the build file points at, when it
    * points at one. Build files for Swift package products carry a
-   * `productRef` instead; see {@link productDependency}.
+   * `productRef` instead, resolved through {@link productDependency}.
    */
   fileReference(): XcodeObject | undefined {
     return this.project.get(this.getString("fileRef"));
@@ -381,12 +381,12 @@ export class SyncRootGroup extends XcodeObject<SyncRootGroupProperties> {
    *
    * Xcode keeps one exception set per target and folder, so when this
    * group already carries a set for the target, the file names merge into
-   * it instead of creating a second set; names already excluded are not
-   * duplicated.
+   * it instead of creating a second set, and names already excluded are
+   * not duplicated.
    *
    * The standard use is keeping a scaffolded `Info.plist` from being
-   * double-copied: the build already processes it through the target's
-   * `INFOPLIST_FILE` setting.
+   * double-copied, since the build already processes it through the
+   * target's `INFOPLIST_FILE` setting.
    *
    * @param target The target whose membership the exceptions restrict.
    * @param membershipExceptions File names inside the folder to exclude.

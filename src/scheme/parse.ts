@@ -160,7 +160,7 @@ class Parser {
     const name = this.parseName("element name");
 
     // Null-prototype storage keeps attribute names off the Object
-    // prototype: `toString` is not a false duplicate, and `__proto__`
+    // prototype, so `toString` is not a false duplicate and `__proto__`
     // stores as a plain own property instead of mutating the prototype.
     const attributes: Record<string, string> = Object.create(null) as Record<string, string>;
     for (;;) {

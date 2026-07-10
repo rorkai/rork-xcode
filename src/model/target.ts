@@ -4,7 +4,7 @@
  * extends it with products, embedding, synchronized folders, Swift
  * packages, and system frameworks.
  *
- * Reads are deliberately soft: user-generated projects can be malformed,
+ * Reads are deliberately soft. User-generated projects can be malformed,
  * so lookups return `undefined` instead of throwing wherever a document
  * could legally or illegally omit something. Mutations create any missing
  * structure they need.
@@ -88,11 +88,11 @@ export class Target<Properties extends TargetProperties = TargetProperties> exte
    *
    * Configurations based on `.xcconfig` files take part once the files
    * are registered through {@link XcodeProject.registerXcconfig}, in
-   * Xcode's order: target settings, the target's xcconfig, project
-   * settings, the project's xcconfig.
+   * Xcode's order of target settings, then the target's xcconfig, then
+   * project settings, then the project's xcconfig.
    *
-   * Only string values are returned; a list- or number-valued setting reads
-   * as `undefined`.
+   * Only string values are returned, so a list- or number-valued setting
+   * reads as `undefined`.
    */
   getBuildSetting(key: string): string | undefined {
     const targetConfiguration = defaultConfigurationOf(this.project, this.getString("buildConfigurationList"));

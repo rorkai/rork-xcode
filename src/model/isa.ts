@@ -1,16 +1,16 @@
 /**
  * Names and well-known values of the pbxproj object vocabulary.
  *
- * Everything here mirrors strings Xcode itself writes; nothing is invented.
- * Centralizing them keeps the object model free of string literals and
- * gives call sites one place to import from.
+ * Everything here mirrors strings Xcode itself writes, and nothing is
+ * invented. Centralizing them keeps the object model free of string
+ * literals and gives call sites one place to import from.
  *
  * @module
  */
 
 /**
  * The `isa` names the object model works with. The parser and serializer
- * accept any isa; this list only covers the kinds the model creates or
+ * accept any isa, and this list only covers the kinds the model creates or
  * gives typed access to.
  */
 export const Isa = {
@@ -175,7 +175,7 @@ export interface EmbedDestination {
 
 /**
  * Resolves the embed phase destination for an extension-like product type.
- * Watch applications are embedded by product type here; callers that only
+ * Watch applications are embedded by product type here. Callers that only
  * know build settings should check the deployment-target key instead.
  */
 export function embedDestinationFor(productType: string | undefined): EmbedDestination {
@@ -186,7 +186,7 @@ export function embedDestinationFor(productType: string | undefined): EmbedDesti
         dstSubfolderSpec: CopyFilesDestination.productsDirectory,
         dstPath: "$(CONTENTS_FOLDER_PATH)/AppClips",
       };
-    // Watch applications embed as full products under Watch; a plain
+    // Watch applications embed as full products under Watch. A plain
     // application only reaches here from watch pairings, where the same
     // destination applies.
     case ProductType.watchApp:

@@ -4,8 +4,8 @@
  * Deterministic object ids hash their seed text (see `uuid.ts`), and the
  * library runs in every JavaScript runtime without depending on a crypto
  * module, so the digest is implemented here. MD5 is used strictly as a
- * stable text-to-bits mapping for identifier generation; nothing security
- * relevant derives from it.
+ * stable text-to-bits mapping for identifier generation, and nothing
+ * security relevant derives from it.
  *
  * @module
  */
@@ -23,7 +23,7 @@ const SHIFTS = [
 ];
 
 /**
- * Step constants for the 64 steps: the integer parts of
+ * Step constants for the 64 steps, which are the integer parts of
  * `abs(sin(i + 1)) * 2^32`, as RFC 1321 section 3.4 tabulates them. The
  * values are fixed by the specification rather than derived through
  * `Math.sin` at load, because the digest feeds deterministic identifiers
@@ -51,9 +51,9 @@ const SINES = new Uint32Array([
 ]);
 
 /**
- * Encodes text as UTF-8 bytes with RFC 1321 padding applied: a `0x80`
- * terminator, zero fill to 56 bytes mod 64, then the bit length as a
- * little-endian 64-bit integer.
+ * Encodes text as UTF-8 bytes with RFC 1321 padding applied, meaning a
+ * `0x80` terminator, zero fill to 56 bytes mod 64, then the bit length as
+ * a little-endian 64-bit integer.
  */
 function paddedUtf8(text: string): Uint8Array {
   const bytes = new TextEncoder().encode(text);
@@ -75,8 +75,8 @@ function paddedUtf8(text: string): Uint8Array {
 /**
  * Adds two 32-bit values with wraparound, keeping intermediates inside the
  * 32-bit range JavaScript bitwise operators preserve. `Math.trunc` is not
- * a substitute here: the bitwise coercion is what performs the modular
- * wrap the algorithm requires.
+ * a substitute here, because the bitwise coercion is what performs the
+ * modular wrap the algorithm requires.
  */
 function add32(a: number, b: number): number {
   // oxlint-disable-next-line unicorn/prefer-math-trunc
@@ -145,7 +145,7 @@ export function md5Hex(text: string): string {
 
   let hex = "";
   for (const word of [a0, b0, c0, d0]) {
-    // The digest serializes little-endian: least significant byte first.
+    // The digest serializes little-endian, least significant byte first.
     for (let shift = 0; shift < 32; shift += 8) {
       hex += ((word >>> shift) & 0xff).toString(16).toUpperCase().padStart(2, "0");
     }

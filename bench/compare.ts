@@ -27,8 +27,8 @@ import { createRequire } from "node:module";
 
 import { buildPbxproj, parsePbxproj, type PbxprojObject } from "../dist/index.js";
 
-// Both compared packages are CommonJS; xcode ships no usable types, so they
-// load through require and are typed here at the boundary.
+// Both compared packages are CommonJS, and xcode ships no usable types, so
+// they load through require and are typed here at the boundary.
 const require = createRequire(import.meta.url);
 
 const baconsJson = require("@bacons/xcode/json") as {
@@ -76,10 +76,10 @@ function parseDocument(text: string): PbxprojObject {
 const id = (n: number): string => `AA${n.toString(16).toUpperCase().padStart(20, "0")}BB`;
 
 /**
- * A deterministically generated app project: five targets of 160 sources
- * each, per-file build settings on a slice of them, framework and resource
- * phases, groups, and per-target build configurations. This matches the
- * object mix and uuid density of a mature production project.
+ * A deterministically generated app project with five targets of 160
+ * sources each, per-file build settings on a slice of them, framework and
+ * resource phases, groups, and per-target build configurations. This
+ * matches the object mix and uuid density of a mature production project.
  */
 function generateLargeProject(): PbxprojObject {
   let nextId = 0;

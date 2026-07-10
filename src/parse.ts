@@ -15,7 +15,8 @@ import { isHexDigit, unescapeString } from "./escape";
 import type { PbxprojObject, PbxprojValue } from "./types";
 
 /**
- * Characters allowed in unquoted string literals: `[A-Za-z0-9_$/:.-]`.
+ * The characters allowed in unquoted string literals are
+ * `[A-Za-z0-9_$/:.-]`.
  *
  * A 256-entry lookup table keyed by code unit keeps classification to a
  * single array read in the hot loop. Non-ASCII units index past the table
@@ -81,7 +82,7 @@ function isDigit(code: number): boolean {
  * Scanner state and grammar productions for one parse call.
  *
  * The parser holds a single cursor into the source string and advances it
- * through the `read*` and `parse*` methods; there is no separate tokenizer
+ * through the `read*` and `parse*` methods. There is no separate tokenizer
  * stage and no token objects.
  */
 class Parser {
@@ -94,7 +95,7 @@ class Parser {
   /**
    * Offset of an unterminated block comment the trivia scanner consumed, or
    * -1. Recording it instead of throwing keeps the trivia scanner free of
-   * failure branches; see {@link fail}.
+   * failure branches, and {@link fail} reports it.
    */
   private unterminatedCommentAt = -1;
 
@@ -110,13 +111,13 @@ class Parser {
    * failure.
    *
    * An unterminated block comment swallows the rest of the input, so any
-   * failure raised after one (always some end-of-input error) is a symptom;
-   * the comment itself is reported instead. Content after the root value is
-   * never scanned, so a trailing unterminated comment still parses, as
-   * Apple's parser accepts it too.
+   * failure raised after one (always some end-of-input error) is a symptom
+   * and the comment itself is reported instead. Content after the root
+   * value is never scanned, so a trailing unterminated comment still
+   * parses, as Apple's parser accepts it too.
    *
    * @param message Failure description without location.
-   * @param offset Offset of the failure; defaults to the current cursor.
+   * @param offset Offset of the failure, defaulting to the current cursor.
    */
   fail(message: string, offset = this.pos): never {
     if (this.unterminatedCommentAt !== -1) {
@@ -241,11 +242,11 @@ class Parser {
   }
 
   /**
-   * Reads a quoted string; the opening quote is at the current position.
+   * Reads a quoted string whose opening quote is at the current position.
    *
-   * The scan tracks whether any escape sequence occurred: unescaped strings
-   * (the overwhelming majority) return as a direct slice, and only escaped
-   * ones pay for {@link unescapeString}.
+   * The scan tracks whether any escape sequence occurred, so unescaped
+   * strings (the overwhelming majority) return as a direct slice, and only
+   * escaped ones pay for {@link unescapeString}.
    */
   readQuotedString(): string {
     const input = this.input;
@@ -318,7 +319,7 @@ class Parser {
   }
 
   /**
-   * Parses the document root: a dictionary or an array.
+   * Parses the document root, which is a dictionary or an array.
    */
   parseDocument(): PbxprojValue {
     const code = this.peek();
@@ -329,7 +330,7 @@ class Parser {
   }
 
   /**
-   * Parses a `{ key = value; ... }` dictionary; the `{` is at the current
+   * Parses a `{ key = value; ... }` dictionary whose `{` is at the current
    * position. Keys may be quoted or unquoted, and every entry requires the
    * `=` and terminating `;`.
    */
@@ -375,9 +376,9 @@ class Parser {
   }
 
   /**
-   * Parses a `( item, item, ... )` array; the `(` is at the current
-   * position. A trailing comma before `)` is allowed; Xcode writes one
-   * after every item.
+   * Parses a `( item, item, ... )` array whose `(` is at the current
+   * position. A trailing comma before `)` is allowed, because Xcode writes
+   * one after every item.
    */
   parseArray(): PbxprojValue[] {
     const input = this.input;
@@ -395,7 +396,7 @@ class Parser {
         return items;
       }
       items.push(this.parseValueAtCursor());
-      // Items are comma-separated; accepting bare whitespace would silently
+      // Items are comma-separated. Accepting bare whitespace would silently
       // merge malformed input (Apple's parser rejects it too).
       const next = this.peek();
       if (next === CODE_COMMA) {
@@ -437,12 +438,12 @@ class Parser {
 /**
  * Decides whether an unquoted literal is a number or a string.
  *
- * One loop with an early exit: the first character outside `[0-9.]` (after
- * an optional leading `-`) settles the token as a string, so the
- * 24-character identifiers that dominate project documents are classified
- * within their first few characters.
+ * The decision is one loop with an early exit. The first character outside
+ * `[0-9.]` (after an optional leading `-`) settles the token as a string,
+ * so the 24-character identifiers that dominate project documents are
+ * classified within their first few characters.
  *
- * Numeric-looking candidates convert under a single print-back rule: the
+ * Numeric-looking candidates convert under a single print-back rule. The
  * literal becomes a number exactly when the number formats back to the
  * identical text. Any literal the conversion would reshape stays a string,
  * so a parse and build cycle cannot change a single byte of any scalar.
@@ -458,7 +459,7 @@ function interpretLiteral(literal: string): PbxprojValue {
   }
 
   // A numeric candidate is digits with at most one dot, plus an optional
-  // leading '-'; anything else is a plain string. The integer value
+  // leading '-', and anything else is a plain string. The integer value
   // accumulates in the same pass, so the common case needs no second scan.
   const digitsStart = first === CODE_MINUS ? 1 : 0;
   let dots = 0;
@@ -475,8 +476,8 @@ function interpretLiteral(literal: string): PbxprojValue {
   }
 
   // Integers of at most 15 digits without a leading zero satisfy the
-  // print-back rule by construction: they are exact in a double, well
-  // inside fixed notation range, and reformat to the same digits. Only
+  // print-back rule by construction, being exact in a double, well inside
+  // fixed notation range, and reformatting to the same digits. Only
   // negative zero would reformat (to "0"), so it falls through.
   if (dots === 0 && literal.length - digitsStart <= 15) {
     const leading = literal.charCodeAt(digitsStart);
@@ -485,9 +486,10 @@ function interpretLiteral(literal: string): PbxprojValue {
     }
   }
 
-  // What remains is rare in real documents: decimals, leading zeros, and
-  // runs beyond double precision. For these the print-back rule is applied
-  // literally, since it is the exact statement of the conversion contract.
+  // The remaining shapes (decimals, leading zeros, and runs beyond double
+  // precision) are rare in real documents. For these the print-back rule
+  // is applied literally, since it is the exact statement of the
+  // conversion contract.
   const value = Number(literal);
   return String(value) === literal ? value : literal;
 }
@@ -503,7 +505,7 @@ function interpretLiteral(literal: string): PbxprojValue {
  * @param text Source text of the document.
  * @returns The document's root value. For real project files this is the
  *   root dictionary with `objects`, `rootObject`, and version fields.
- * @throws PbxprojParseError when the document is malformed; the error
+ * @throws PbxprojParseError when the document is malformed. The error
  *   carries the line and column of the failure.
  */
 export function parsePbxproj(text: string): PbxprojValue {

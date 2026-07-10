@@ -60,7 +60,7 @@ export class PbxprojParseError extends Error {
   readonly position: PbxprojErrorPosition;
 
   /**
-   * @param message Failure description without location; the location is
+   * @param message Failure description without location. The location is
    *   appended automatically.
    * @param source Full source text, used to compute the position.
    * @param offset Character offset of the failure inside `source`.
@@ -86,7 +86,7 @@ export class XcschemeParseError extends Error {
   readonly position: PbxprojErrorPosition;
 
   /**
-   * @param message Failure description without location; the location is
+   * @param message Failure description without location. The location is
    *   appended automatically.
    * @param source Full source text, used to compute the position.
    * @param offset Character offset of the failure inside `source`.
@@ -112,7 +112,7 @@ export class XcconfigParseError extends Error {
   readonly position: PbxprojErrorPosition;
 
   /**
-   * @param message Failure description without location; the location is
+   * @param message Failure description without location. The location is
    *   appended automatically.
    * @param source Full source text, used to compute the position.
    * @param offset Character offset of the failure inside `source`.
@@ -137,7 +137,7 @@ export class XcschemeBuildError extends Error {
   readonly path: string;
 
   /**
-   * @param message Failure description without location; the element path
+   * @param message Failure description without location. The element path
    *   is appended automatically.
    * @param path Path to the offending element from the root.
    */
@@ -149,7 +149,7 @@ export class XcschemeBuildError extends Error {
 }
 
 /**
- * Thrown by the object model when an operation cannot proceed: the
+ * Thrown by the object model when an operation cannot proceed, because the
  * document lacks the structure the operation needs (no objects dictionary,
  * no root project object), a view's object was removed from the document,
  * or a creation request names a product type the model cannot scaffold.
@@ -183,7 +183,7 @@ export class PbxprojBuildError extends Error {
   readonly path: string;
 
   /**
-   * @param message Failure description without location; the value path is
+   * @param message Failure description without location. The value path is
    *   appended automatically.
    * @param path Path to the offending value from the root, `$`.
    */

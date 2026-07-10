@@ -23,7 +23,8 @@ test("matches the RFC 1321 test vectors", () => {
 
 test("agrees with the platform digest across padding boundaries", () => {
   // Message lengths around the 56-byte and 64-byte marks exercise every
-  // padding branch: the bit-length field must land in the right block.
+  // padding branch, because the bit-length field must land in the right
+  // block.
   for (const length of [0, 1, 54, 55, 56, 57, 63, 64, 65, 119, 120, 128, 1000]) {
     const text = "x".repeat(length);
     expect(md5Hex(text)).toBe(referenceMd5(text));

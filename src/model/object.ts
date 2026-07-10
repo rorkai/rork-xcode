@@ -142,8 +142,8 @@ export class XcodeObject<Properties extends PbxprojObject = PbxprojObject> {
    * nested dictionaries keyed by object id (such as the root project's
    * `TargetAttributes`) drop its entry.
    *
-   * This is the low-level removal; it does not cascade to objects that only
-   * made sense alongside this one. Higher-level operations like
+   * This is the low-level removal, so it does not cascade to objects that
+   * only made sense alongside this one. Higher-level operations like
    * {@link XcodeProject.removeTarget} compose it into full teardowns.
    */
   removeFromProject(): void {

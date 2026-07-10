@@ -1,9 +1,9 @@
 /**
  * Small value-narrowing helpers shared by the object model.
  *
- * Parsed documents are untrusted input: any field can hold any value type,
- * so every read that expects a particular shape narrows through these
- * helpers instead of asserting.
+ * Parsed documents are untrusted input where any field can hold any value
+ * type, so every read that expects a particular shape narrows through
+ * these helpers instead of asserting.
  *
  * @module
  */
@@ -59,7 +59,7 @@ export function ensureArray(object: PbxprojObject, key: string): PbxprojValue[] 
  * Collects the string items of a possibly absent, possibly mixed array.
  *
  * Reference lists in well-formed documents contain only id strings, but a
- * malformed document can mix in anything; non-strings are skipped rather
+ * malformed document can mix in anything. Non-strings are skipped rather
  * than thrown on, matching the library's soft-failure stance on reads.
  */
 export function stringItems(value: PbxprojValue | undefined): string[] {
