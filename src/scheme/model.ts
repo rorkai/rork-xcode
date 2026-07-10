@@ -12,6 +12,7 @@
  * @module
  */
 
+import { renameFileNameStem } from "../rename";
 import { buildXcscheme } from "./build";
 import { parseXcscheme } from "./parse";
 import { isXcschemeElement } from "./types";
@@ -177,6 +178,54 @@ export class Xcscheme {
    */
   buildableReferences(): BuildableReference[] {
     return this.elements("BuildableReference").map((element) => new BuildableReference(element));
+  }
+
+  /**
+   * Renames every buildable reference pointing at a target. The blueprint
+   * name is matched whole, and the buildable name is matched by its stem,
+   * so `OldApp.app` becomes `NewApp.app` while `OldAppTests.xctest`, a
+   * different target's product, stays untouched. This is the scheme-file
+   * side of `XcodeProject.renameTarget`. Returns whether anything
+   * changed, so callers can skip rewriting untouched files.
+   */
+  renameTarget(oldName: string, newName: string): boolean {
+    if (oldName === newName) {
+      return false;
+    }
+    let changed = false;
+    for (const reference of this.buildableReferences()) {
+      if (reference.blueprintName === oldName) {
+        reference.blueprintName = newName;
+        changed = true;
+      }
+      const buildableName = reference.buildableName;
+      const renamed = buildableName == null ? undefined : renameFileNameStem(buildableName, oldName, newName);
+      if (renamed != null) {
+        reference.buildableName = renamed;
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  /**
+   * Rewrites every buildable reference's container after the
+   * `.xcodeproj` directory itself is renamed, so `container:Old.xcodeproj`
+   * becomes `container:New.xcodeproj`. The project names are matched
+   * exactly. Returns whether anything changed.
+   */
+  renameContainer(oldProjectName: string, newProjectName: string): boolean {
+    if (oldProjectName === newProjectName) {
+      return false;
+    }
+    let changed = false;
+    for (const reference of this.buildableReferences()) {
+      if (reference.referencedContainer === `container:${oldProjectName}.xcodeproj`) {
+        reference.referencedContainer = `container:${newProjectName}.xcodeproj`;
+        changed = true;
+      }
+    }
+    return changed;
   }
 }
 

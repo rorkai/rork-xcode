@@ -260,6 +260,8 @@ for (const path of paths) {
 // 1. Run validate(). Issues are statistics, not failures.
 // 2. If an app target exists, add a probe extension, then remove it.
 //    The document must stay byte-stable after each step.
+// 3. Rename the app target to a probe name and back. The document must
+//    stay a fixed point after each rename.
 //
 // Findings are only unexpected errors and instability.
 console.log("exercising the object model on every parsed project...");
@@ -309,6 +311,23 @@ for (const file of parsed) {
       findings.push(`${file.path}: document after teardown is not a fixed point`);
       continue;
     }
+
+    const originalName = app.name;
+    if (originalName != null) {
+      project.renameTarget(app, "RorkXcodeRenameProbe");
+      const renamed = project.build();
+      if (buildPbxproj(parsePbxproj(renamed) as PbxprojObject) !== renamed) {
+        findings.push(`${file.path}: renamed document is not a fixed point`);
+        continue;
+      }
+      project.renameTarget(app, originalName);
+      const renamedBack = project.build();
+      if (buildPbxproj(parsePbxproj(renamedBack) as PbxprojObject) !== renamedBack) {
+        findings.push(`${file.path}: document after renaming back is not a fixed point`);
+        continue;
+      }
+    }
+
     modelMutated += 1;
     mutatedSample.push(mutated);
   } catch (error) {

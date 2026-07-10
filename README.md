@@ -206,6 +206,17 @@ if (widget) project.removeTarget(widget);
 project.referrersOf(app.id); // every object referencing an id, for custom teardowns
 ```
 
+### Renaming
+
+`renameTarget` renames a target and every place the document knows it by name. That covers the target's `name` and `productName`, its product file reference, the `remoteInfo` of container proxies pointing at it, `TEST_TARGET_NAME` values naming it, and the path segments of `TEST_HOST` and `BUNDLE_LOADER` that name the target or its product. Names match whole, so renaming `DemoApp` leaves `DemoAppTests` alone, and a `PRODUCT_NAME` of `$(TARGET_NAME)` follows by itself. On-disk renames (source folders, entitlements files) and the group paths pointing at those folders stay with the caller.
+
+```ts
+const app = project.findMainAppTarget("ios");
+if (app) project.renameTarget(app, "RenamedApp");
+```
+
+Scheme files live next to the project rather than inside it, so the scheme model carries the counterpart (see [Schemes](#schemes)).
+
 ### Escape hatch
 
 Every view exposes its raw dictionary, so anything the typed surface does not cover stays one property away, and `project.objects()` iterates every object with its typed view:
@@ -235,24 +246,20 @@ for (const [id, object] of project.objects()) {
 
 `.xcscheme` files describe how Xcode builds, runs, tests, and archives a target. They are not property lists but a small XML dialect of their own, and the scheme module covers it with the same contract as the pbxproj functions. An Xcode-written scheme rebuilds byte for byte, any other input reaches Xcode's canonical layout in one build, and malformed input fails with a typed error carrying line and column.
 
-`Xcscheme` is the model. Buildable references are the elements editing flows touch, and they come back as typed views:
+`Xcscheme` is the model. Renames are one call per move. `renameTarget` is the scheme-file side of the project model's `renameTarget` and touches only the named target's references, and `renameContainer` follows a rename of the `.xcodeproj` directory itself. Both return whether anything changed, so callers can skip rewriting untouched files:
 
 ```ts
 import { Xcscheme } from "rork-xcode";
 
 const scheme = Xcscheme.parse(xcschemeText);
 
-// Rename the app while keeping each product's own shape, so a testable
-// like DemoAppTests.xctest stays a test bundle.
-for (const reference of scheme.buildableReferences()) {
-  const { blueprintName, buildableName } = reference;
-  if (blueprintName) reference.blueprintName = blueprintName.replace("DemoApp", "RenamedApp");
-  if (buildableName) reference.buildableName = buildableName.replace("DemoApp", "RenamedApp");
-  reference.referencedContainer = "container:RenamedApp.xcodeproj";
-}
+scheme.renameTarget("DemoApp", "RenamedApp"); // DemoAppTests stays untouched
+scheme.renameContainer("DemoApp", "RenamedApp"); // container:RenamedApp.xcodeproj
 
 const text = scheme.build();
 ```
+
+For anything else, buildable references come back as typed views through `scheme.buildableReferences()`, with property access to the blueprint name, buildable name, container, and identifier.
 
 `Xcscheme.create` produces the scheme Xcode's own "New Scheme" action writes for an application target, wired to the target's object id from the project document:
 
