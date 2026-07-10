@@ -117,7 +117,7 @@ describe("malformed input", () => {
     expect(() => parsePbxproj("plain")).toThrow(PbxprojParseError);
   });
 
-  // Apple's parser rejects both of these; being lenient would silently
+  // Apple's parser rejects both of these. Being lenient would silently
   // reshape malformed documents instead of surfacing them.
   it("rejects array items separated by whitespace only", () => {
     expect(() => parsePbxproj("{ items = (a b); }")).toThrow(PbxprojParseError);

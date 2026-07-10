@@ -11,7 +11,7 @@
  * - reference comments (`13B07F86… /* AppDelegate.swift in Sources *​/`)
  *   derived from the object graph.
  *
- * Numbers render exactly as JavaScript formats them; the version-like
+ * Numbers render exactly as JavaScript formats them. The version-like
  * settings Xcode writes with a trailing zero (`SWIFT_VERSION = 5.0`) arrive
  * from the parser as strings and round-trip verbatim, so no reformatting
  * heuristic is needed or applied.
@@ -86,28 +86,28 @@ function indentString(depth: number): string {
 /**
  * Serialization state for one {@link buildPbxproj} call.
  *
- * The `write*` methods append directly to the output string; the `render*`
- * methods return fragments for the caller to place. Output accumulates by
- * appending, because engines represent growing strings as ropes: appends
- * stay cheap where template interpolation would allocate an intermediate
- * string per line.
+ * The `write*` methods append directly to the output string, and the
+ * `render*` methods return fragments for the caller to place. Output
+ * accumulates by appending, because engines represent growing strings as
+ * ropes. Appends stay cheap where template interpolation would allocate
+ * an intermediate string per line.
  */
 class Writer {
   /** The document text accumulated so far. */
   private out = "";
 
-  /** Current nesting depth; one tab per level. */
+  /** Current nesting depth, one tab per level. */
   private indent = 0;
 
   /** Display comment per referenced uuid, derived once from the object graph. */
   private readonly comments: Map<string, string>;
 
   /**
-   * Rendered string values by input string: `id /* comment *​/` for
-   * referenced uuids, quoted text for everything else. Referenced objects
-   * render at least twice (their section entry plus each referencing site)
-   * and build settings repeat across configurations, so most renders are
-   * cache hits. The map lives for one build call only.
+   * Rendered string values keyed by input string. Referenced uuids render
+   * as `id /* comment *​/` and everything else as quoted text. Referenced
+   * objects render at least twice (their section entry plus each
+   * referencing site) and build settings repeat across configurations, so
+   * most renders are cache hits. The map lives for one build call only.
    */
   private readonly renderedReferences = new Map<string, string>();
 
@@ -118,7 +118,7 @@ class Writer {
   private readonly quotedKeys = new Map<string, string>();
 
   /**
-   * Serializes the whole document eagerly; read it back with
+   * Serializes the whole document eagerly. Read it back with
    * {@link toString}.
    *
    * @param root The document root dictionary.
@@ -160,7 +160,7 @@ class Writer {
    *
    * Most calls hit the cache, and the writers call this for every key and
    * reference, so the method body stays small enough for the engine to
-   * inline; the miss path lives in {@link renderReferenceUncached}.
+   * inline. The miss path lives in {@link renderReferenceUncached}.
    */
   private renderReference(id: string): string {
     const cached = this.renderedReferences.get(id);
@@ -209,8 +209,8 @@ class Writer {
    * Renders a string value in its key's context.
    *
    * `remoteGlobalIDString` and `TestTargetID` hold uuids of objects in
-   * another container; annotating them with this container's comments would
-   * be wrong, so they render bare.
+   * another container. Annotating them with this container's comments
+   * would be wrong, so they render bare.
    */
   private renderStringValue(key: string, value: string): string {
     if (key === "remoteGlobalIDString" || key === "TestTargetID") {
@@ -223,7 +223,7 @@ class Writer {
    * Appends the entries of a dictionary, one `key = value;` line each.
    *
    * Value paths (`$.objects.AA….name`) exist for error messages and are
-   * only constructed in the branches that recurse or throw; the flat string
+   * only constructed in the branches that recurse or throw. The flat string
    * and number lines that dominate documents skip the concatenation.
    *
    * @param object The dictionary whose entries to write.
@@ -264,7 +264,7 @@ class Writer {
         if (isBase && key === "objects") {
           this.writeObjectsSections(value, `${path}.${key}`);
         } else {
-          // The base flag applies to root-level keys only; nested empty
+          // The base flag applies to root-level keys only. Nested empty
           // dictionaries collapse to `{}` even under a root dictionary.
           this.writeObjectBody(value, false, `${path}.${key}`);
         }
@@ -306,8 +306,8 @@ class Writer {
 
       for (const [id, object] of entries) {
         this.writeIndent();
-        // Build files and file references render inline; Xcode keeps these
-        // high-volume sections one entry per line.
+        // Build files and file references render inline, because Xcode
+        // keeps these high-volume sections one entry per line.
         if (isa === "PBXBuildFile" || isa === "PBXFileReference") {
           let text = this.renderInlineObject(id, object, `${path}.${id}`);
           if (text.endsWith(" ")) {
@@ -412,18 +412,18 @@ class Writer {
 /**
  * Serializes a project document to `project.pbxproj` text.
  *
- * The input is the same shape {@link parsePbxproj} produces; see the module
- * documentation of `types.ts` for the value model. Output is stable: two
+ * The input is the same shape {@link parsePbxproj} produces. See the module
+ * documentation of `types.ts` for the value model. Output is stable, so two
  * calls with semantically equal documents produce identical text, and the
  * layout matches what Xcode itself writes so diffs stay minimal.
  *
  * @param root The document root. Real project documents carry `objects`,
  *   `rootObject`, and the version fields, but any dictionary serializes.
  * @returns The document text, terminated by a newline.
- * @throws PbxprojBuildError when a value has no pbxproj representation:
- *   `null`, `undefined`, booleans, bigints, functions, symbols, class
- *   instances, or non-finite numbers. The error names the path of the
- *   offending value.
+ * @throws PbxprojBuildError when a value has no pbxproj representation,
+ *   meaning `null`, `undefined`, booleans, bigints, functions, symbols,
+ *   class instances, or non-finite numbers. The error names the path of
+ *   the offending value.
  */
 export function buildPbxproj(root: PbxprojObject): string {
   if (!isDictionary(root)) {

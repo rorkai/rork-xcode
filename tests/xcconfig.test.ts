@@ -21,9 +21,9 @@ const FIXTURES = [
 
 /**
  * A hand-authored file exercising every statement kind and the format's
- * quirks: comments standalone and trailing, conditions, both include
- * forms, a trailing semicolon, setting references, and a value whose
- * `//` starts a comment mid-URL the way Xcode reads it.
+ * quirks. It carries standalone and trailing comments, conditions, both
+ * include forms, a trailing semicolon, setting references, and a value
+ * whose `//` starts a comment mid-URL the way Xcode reads it.
  */
 const SAMPLE = `// Base configuration for the app target.
 
@@ -310,7 +310,7 @@ describe("Xcconfig", () => {
       resolveInclude: (path) => (path === "shared.xcconfig" ? shared : undefined),
     });
 
-    // A prior value in the chain is spliced in; with none, the reference
+    // A prior value in the chain is spliced in. With none, the reference
     // stays literal so layers below the file can still resolve it.
     expect(settings["OTHER_LDFLAGS"]).toBe("-lbase -lextra");
     expect(settings["OTHER_CFLAGS"]).toBe("${inherited} -DX");

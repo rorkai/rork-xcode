@@ -61,8 +61,8 @@ function openApp(): XcodeProject {
 
 /**
  * Scaffolds a widget extension into the sample app the way Xcode's own
- * target template does: create the target, configure it, wire the
- * dependency, embed it, and synchronize its folder with an Info.plist
+ * target template does. It creates the target, configures it, wires the
+ * dependency, embeds it, and synchronizes its folder with an Info.plist
  * membership exception.
  */
 function scaffoldWidget(project: XcodeProject): {
@@ -167,8 +167,9 @@ describe("reading a real project", () => {
 
     const target = project.findMainAppTarget("ios");
     assert(target);
-    // The target's own configuration omits SDKROOT; the value resolves from
-    // the project configuration, and a target-level write then shadows it.
+    // The target's own configuration omits SDKROOT, so the value resolves
+    // from the project configuration, and a target-level write then
+    // shadows it.
     expect(target.getBuildSetting("SDKROOT")).toBe("appletvos");
     target.setBuildSetting("SDKROOT", "iphoneos");
     expect(target.getBuildSetting("SDKROOT")).toBe("iphoneos");
@@ -393,8 +394,9 @@ describe("Swift packages", () => {
 
 describe("build files and phases", () => {
   it("relocates a product between copy phases", () => {
-    // Mirrors the ExtensionKit packaging repair: the product's build file
-    // must leave every other copy phase and land in the Extensions phase.
+    // Mirrors the ExtensionKit packaging repair, where the product's build
+    // file must leave every other copy phase and land in the Extensions
+    // phase.
     const project = openApp();
     const { host, widget } = scaffoldWidget(project);
     const product = widget.productReference;
@@ -548,8 +550,8 @@ describe("removal", () => {
     assert(app);
 
     const referrerIsas = project.referrersOf(app.id).map((referrer) => referrer.isa);
-    // The root project references the target twice: the targets list and
-    // the TargetAttributes dictionary keyed by target id.
+    // The root project references the target twice, through the targets
+    // list and the TargetAttributes dictionary keyed by target id.
     expect(referrerIsas).toContain(Isa.project);
   });
 
@@ -566,12 +568,12 @@ describe("removal", () => {
     const dependencyCount = () => [...project.objects()].filter(([, view]) => view.isa === Isa.targetDependency).length;
     const proxyCount = () => [...project.objects()].filter(([, view]) => view.isa === Isa.containerItemProxy).length;
 
-    // The fixture's test targets already depend on the app; measure from
-    // that baseline.
+    // The fixture's test targets already depend on the app, so measure
+    // from that baseline.
     const baselineDependencies = dependencyCount();
     const baselineProxies = proxyCount();
 
-    // Wire two pairs around the widget: the host depends on it, and it
+    // Wire two pairs around the widget, so the host depends on it, and it
     // depends on a helper extension.
     const { widget } = scaffoldWidget(project);
     const helper = project.addNativeTarget({ name: "HelperExt", productType: ProductType.appExtension });
@@ -579,7 +581,7 @@ describe("removal", () => {
     expect(dependencyCount()).toBe(baselineDependencies + 2);
     expect(proxyCount()).toBe(baselineProxies + 2);
 
-    // Removing the widget tears down both directions; nothing dangles.
+    // Removing the widget tears down both directions, and nothing dangles.
     project.removeTarget(widget);
     expect(dependencyCount()).toBe(baselineDependencies);
     expect(proxyCount()).toBe(baselineProxies);
@@ -634,7 +636,7 @@ describe("removal", () => {
 
     project.removeTarget(widget);
 
-    // No dangling widget artifacts: no build phases, configurations,
+    // Nothing of the widget dangles. No build phases, configurations,
     // product references, dependencies, proxies, exception sets, or sync
     // groups mentioning the removed target survive.
     const dump = project.build();
@@ -914,7 +916,7 @@ describe("xcconfig layering", () => {
     app.setBuildSetting("SWIFT_VERSION", "5.10");
     expect(app.getBuildSetting("SWIFT_VERSION")).toBe("5.10");
 
-    // Project-level pbxproj settings sit above the project xcconfig; the
+    // Project-level pbxproj settings sit above the project xcconfig. The
     // fixture defines SDKROOT there, so a project xcconfig cannot mask it.
     project.registerXcconfig(projectReference, Xcconfig.parse("SDKROOT = appletvos\n"));
     expect(app.getBuildSetting("SDKROOT")).toBe("iphoneos");
@@ -972,7 +974,7 @@ describe("typed views and narrowing", () => {
     const project = XcodeProject.fromDocument({ objects: {}, rootObject: "XXROOT000000000000000000" });
     for (const isa of Object.values(Isa)) {
       const view = project.add(isa, {});
-      // A base XcodeObject marks a kind outside the vocabulary; every
+      // A base XcodeObject marks a kind outside the vocabulary, so every
       // listed isa must map to a view class declaring exactly that isa.
       expect((view.constructor as typeof XcodeObject).isa, isa).toBe(isa);
     }
@@ -1157,8 +1159,8 @@ describe("failure modes", () => {
 
 /**
  * Cross-validation against Apple's own parser, mirroring the plutil suite
- * for parser and serializer output: scaffolded documents must be accepted
- * by Apple tooling. Runs only where plutil exists.
+ * for parser and serializer output, so scaffolded documents must be
+ * accepted by Apple tooling. Runs only where plutil exists.
  */
 describe.skipIf(process.platform !== "darwin")("plutil accepts scaffolded documents", () => {
   it("lints the widget scaffold output", () => {

@@ -13,14 +13,15 @@
  * - the object model can validate and edit the project (see the model
  *   exercise below);
  * - the parsed values agree with plutil's own reading of the document
- *   (sampled; OpenStep scalars are untyped, so values compare as text).
+ *   (sampled, and since OpenStep scalars are untyped, values compare as
+ *   text).
  *
  * A parse failure on a file plutil accepts, an unstable round-trip, or a
  * value disagreement is a real finding and fails the run. Files plutil
  * itself rejects are corrupt input, not evidence.
  *
  * Run with `pnpm corpus`. Roots, file cap, and the plutil sample size are
- * flags; macOS is required for the differential half.
+ * flags, and macOS is required for the differential half.
  */
 /* oxlint-disable no-console -- printing the audit report to stdout is this script's output */
 
@@ -168,9 +169,9 @@ interface ParsedFile {
 /**
  * Normalizes a parsed pbxproj value for comparison with plutil's reading.
  *
- * OpenStep scalars carry no type markers, so plutil reads every scalar as a
- * string; numbers on our side compare through their text form. Dictionary
- * keys sort so the comparison ignores ordering.
+ * OpenStep scalars carry no type markers, so plutil reads every scalar as
+ * a string and numbers on our side compare through their text form.
+ * Dictionary keys sort so the comparison ignores ordering.
  */
 function normalize(value: PbxprojValue | PlistValue): unknown {
   if (value instanceof Uint8Array) {
@@ -394,7 +395,7 @@ if (process.platform === "darwin") {
 }
 
 // Scheme sweep. Every readable .xcscheme must parse and reach a
-// byte-stable fixed point; Xcode-written files are expected byte-exact.
+// byte-stable fixed point, and Xcode-written files are expected byte-exact.
 const schemeCounts = new Map<string, number>();
 for (const path of schemePaths) {
   let text: string;
@@ -424,9 +425,9 @@ for (const path of schemePaths) {
 }
 
 // Xcconfig sweep. The format is hand-authored with no canonical writer,
-// so the bar is lossless reproduction: parse and build must return the
-// input byte for byte. Parse failures are findings because the parser is
-// expected to read anything Xcode reads.
+// so the bar is lossless reproduction, where parse and build must return
+// the input byte for byte. Parse failures are findings because the parser
+// is expected to read anything Xcode reads.
 const xcconfigCounts = new Map<string, number>();
 for (const path of xcconfigPaths) {
   let text: string;

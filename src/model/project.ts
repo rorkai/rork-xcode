@@ -3,7 +3,7 @@
  * `project.pbxproj`.
  *
  * The model is a set of lightweight views over the plain parsed document.
- * All state lives in the document itself; views hold only an id and a
+ * All state lives in the document itself. Views hold only an id and a
  * project reference, so model mutations and direct dictionary writes
  * compose freely and {@link XcodeProject.build} always serializes the
  * current state. New objects receive deterministic identifiers (see
@@ -83,7 +83,7 @@ export class RootProject extends XcodeObject<RootProjectProperties> {
 
   /**
    * The settings dictionary of the project-level default configuration.
-   * Targets inherit from these settings; see
+   * Targets inherit from these settings, as described on
    * {@link NativeTarget.getBuildSetting}.
    */
   defaultConfigurationSettings(): PbxprojObject | undefined {
@@ -207,7 +207,7 @@ export class XcodeProject {
 
   /**
    * Wraps an already parsed document in a model. The document is used in
-   * place, not copied; model mutations write into it.
+   * place rather than copied, so model mutations write into it.
    */
   static fromDocument(document: PbxprojObject): XcodeProject {
     return new XcodeProject(document);
@@ -224,7 +224,7 @@ export class XcodeProject {
   /**
    * The raw properties dictionary of an object.
    *
-   * @throws XcodeModelError when no object with the id exists; views use
+   * @throws XcodeModelError when no object with the id exists. Views use
    *   this accessor, so a view of a deleted object fails loudly instead of
    *   resurrecting the entry.
    */
@@ -281,8 +281,8 @@ export class XcodeProject {
 
   /**
    * Generates a deterministic 24-character id from a seed, avoiding every
-   * id the document currently contains. The id is not reserved; adding an
-   * object with it (see {@link add}) is what claims it.
+   * id the document currently contains. The id is not reserved, and only
+   * adding an object with it (see {@link add}) claims it.
    */
   generateId(seed: string): string {
     return generateObjectId(seed, new Set(Object.keys(this.objectsDictionary)));
@@ -406,7 +406,8 @@ export class XcodeProject {
    * and Resources build phases, and registers it on the project.
    *
    * @throws XcodeModelError for product types the model cannot create a
-   *   product reference for; see {@link AddNativeTargetOptions.productType}.
+   *   product reference for, listed on
+   *   {@link AddNativeTargetOptions.productType}.
    */
   addNativeTarget(options: AddNativeTargetOptions): NativeTarget {
     const productInfo = PRODUCT_FILE_INFO[options.productType];
@@ -479,7 +480,7 @@ export class XcodeProject {
   /**
    * Adds a remote Swift package reference and registers it on the project.
    * When the project already references the repository, the existing
-   * reference is returned unchanged, requirement included; adjust an
+   * reference is returned unchanged, requirement included. Adjust an
    * existing requirement through the reference's properties. Link products
    * to targets with {@link NativeTarget.addSwiftPackageProduct}.
    *
@@ -582,7 +583,7 @@ export class XcodeProject {
    * list containing it, or a nested dictionary carrying it as a key or
    * string value.
    *
-   * The scan is linear over the document; removal flows call it once per
+   * The scan is linear over the document. Removal flows call it once per
    * removed object, which keeps teardown proportional to what is actually
    * removed.
    */
@@ -603,7 +604,7 @@ export class XcodeProject {
    * (such as `TargetAttributes`) drop its entry.
    *
    * Removing an id the document does not contain is a no-op. This is the
-   * low-level removal; {@link removeTarget} composes it into a full
+   * low-level removal, and {@link removeTarget} composes it into a full
    * teardown.
    */
   removeObject(id: string): void {
@@ -626,7 +627,7 @@ export class XcodeProject {
    * dependencies on others), its membership exception sets, and
    * synchronized folders no remaining target links.
    *
-   * On-disk sources are untouched; the removal is document-only, like
+   * On-disk sources are untouched. The removal is document-only, like
    * deleting a target in Xcode and keeping its folder.
    *
    * @throws XcodeModelError when the target belongs to another project,
@@ -794,7 +795,7 @@ export class XcodeProject {
    * (nested group `path` components join with `/`).
    *
    * Members of file-system-synchronized folders are not listed in the
-   * document and therefore cannot be found; check
+   * document and therefore cannot be found. Check
    * {@link NativeTarget.syncGroupPaths} for folder-level containment
    * instead.
    */
@@ -804,8 +805,8 @@ export class XcodeProject {
       return undefined;
     }
 
-    // A malformed document can link groups into a cycle; visited ids bound
-    // the walk to each group once.
+    // A malformed document can link groups into a cycle, so visited ids
+    // bound the walk to each group once.
     const visited = new Set<string>();
     const search = (group: Group, prefix: string): XcodeObject | undefined => {
       if (visited.has(group.id)) {
@@ -1037,7 +1038,7 @@ function stripValue(value: PbxprojValue, id: string): PbxprojValue | undefined {
 }
 
 /**
- * Strips every reference to the id from an object's properties; see
+ * Strips every reference to the id from an object's properties. See
  * {@link stripValue} for the shapes handled. String properties naming the
  * id are deleted rather than left empty.
  */

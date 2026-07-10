@@ -1,5 +1,6 @@
 /**
- * rork-xcode: zero-dependency Xcode project (pbxproj) parser and builder.
+ * rork-xcode is a zero-dependency Xcode project (pbxproj) parser and
+ * builder.
  *
  * The library is a single ESM artifact with named exports and no
  * environment-conditional entry points, so the same code path runs in

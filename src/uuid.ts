@@ -2,7 +2,7 @@
  * Deterministic object identifiers for generated pbxproj objects.
  *
  * Xcode identifies every object with 24 hexadecimal characters. Generated
- * ids here are deterministic: the same seed always produces the same id, so
+ * ids here are deterministic. The same seed always produces the same id, so
  * programmatic edits are reproducible and diffs stay minimal across runs.
  * The format is `XX` + the first 20 characters of `md5(seed)` + `XX`, which
  * is a valid identifier that remains recognizable as generated.

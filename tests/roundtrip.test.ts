@@ -10,13 +10,14 @@ function fixture(name: string): string {
  * Documents already in the writer's canonical layout (the layout current
  * Xcode writes), so a parse → build cycle must reproduce them byte for byte.
  *
- * - app-xcode16: real app with file-system-synchronized groups.
- * - legacy-groups: real app with classic PBXGroup file listings.
- * - app-exceptions: generated in current Xcode's shape; synchronized folders
- *   with both exception-set kinds, a target dependency, an embed phase, and
- *   a remote Swift package.
- * - framework-multiplatform: large real-world framework project (~100 KiB,
- *   identifiers neutralized) with variant groups and per-platform targets.
+ * The app-xcode16 fixture is a real app with file-system-synchronized
+ * groups, and legacy-groups is a real app with classic PBXGroup file
+ * listings. The app-exceptions fixture is generated in current Xcode's
+ * shape, with synchronized folders carrying both exception-set kinds, a
+ * target dependency, an embed phase, and a remote Swift package. The
+ * framework-multiplatform fixture is a large real-world framework project
+ * (~100 KiB, identifiers neutralized) with variant groups and
+ * per-platform targets.
  */
 const BYTE_EXACT_FIXTURES = [
   "app-xcode16.pbxproj",
@@ -32,13 +33,13 @@ const BYTE_EXACT_FIXTURES = [
  * layout, reaching a byte-stable fixed point with unchanged values, rather
  * than reproduce their original bytes.
  *
- * - legacy-aggregate-cocoa: ancient real-world project (identifiers
- *   neutralized) with aggregate and legacy targets, reference proxies into
- *   a subproject, variant groups, and build rules.
- * - sync-groups-xcode16: real Xcode 16.0 app (identifiers neutralized)
- *   whose exception sets carry the older isa-only comments.
- * - number-fidelity: scalar torture document (0.0, 1.1, 1.0, "1.0", 1.10,
- *   01) in an unsectioned layout.
+ * The legacy-aggregate-cocoa fixture is an ancient real-world project
+ * (identifiers neutralized) with aggregate and legacy targets, reference
+ * proxies into a subproject, variant groups, and build rules. The
+ * sync-groups-xcode16 fixture is a real Xcode 16.0 app (identifiers
+ * neutralized) whose exception sets carry the older isa-only comments.
+ * The number-fidelity fixture is a scalar torture document (0.0, 1.1,
+ * 1.0, "1.0", 1.10, 01) in an unsectioned layout.
  */
 const NORMALIZING_FIXTURES = [
   "legacy-aggregate-cocoa.pbxproj",
@@ -59,10 +60,11 @@ describe.each(NORMALIZING_FIXTURES)("%s", (name) => {
     const document = parsePbxproj(original);
     const rebuilt = buildPbxproj(document as PbxprojObject);
 
-    // One build reaches the canonical form; another cycle must not move.
+    // One build reaches the canonical form, and another cycle must not
+    // move.
     expect(buildPbxproj(parsePbxproj(rebuilt) as PbxprojObject)).toBe(rebuilt);
 
-    // Normalization changes layout only; every value survives (toEqual
+    // Normalization changes layout only, and every value survives (toEqual
     // compares dictionaries without regard to key order).
     expect(parsePbxproj(rebuilt)).toEqual(document);
   });
@@ -73,8 +75,8 @@ test("number-fidelity preserves each scalar's lexical form", () => {
   const objects = document["objects"] as Record<string, PbxprojObject>;
   const project = objects["123456789123456789012345"];
   assert(project);
-  // Trailing-zero decimals and leading-zero runs stay strings; plain
-  // decimals become numbers; quoting always forces a string.
+  // Trailing-zero decimals and leading-zero runs stay strings, plain
+  // decimals become numbers, and quoting always forces a string.
   expect(project["one"]).toBe("0.0");
   expect(project["two"]).toBe(1.1);
   expect(project["three"]).toBe("1.0");

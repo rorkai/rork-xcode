@@ -21,8 +21,8 @@ import type { XcconfigCondition, XcconfigDocument, XcconfigStatement } from "./t
 const INCLUDE_PATTERN = /^#include(\?)?\s*"([^"]*)"\s*(?:\/\/.*)?$/u;
 
 /**
- * Matches the head of an assignment: leading whitespace, the setting
- * name, and the raw conditions block up to the equals sign.
+ * Matches the head of an assignment, which is the leading whitespace, the
+ * setting name, and the raw conditions block up to the equals sign.
  */
 const ASSIGNMENT_HEAD_PATTERN = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*((?:\[[^\]]*\])*)\s*=/u;
 

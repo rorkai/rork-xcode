@@ -132,15 +132,15 @@ test("remoteGlobalIDString renders without a reference comment", () => {
 
 test("root-level empty dictionaries render multi-line; nested ones collapse to {}", () => {
   // Only immediate root keys (like `classes`) render empty dictionaries
-  // multi-line; anything deeper uses the inline `{}` form.
+  // multi-line, and anything deeper uses the inline `{}` form.
   const text = buildPbxproj({ classes: {}, extras: { empty: {} } });
   expect(text).toContain("classes = {\n\t};");
   expect(text).toContain("empty = {};");
 });
 
 test("comment text cannot terminate the comment early", () => {
-  // Comments derive from document fields; a crafted name containing `*/`
-  // must not break out of `/* ... */` and corrupt the document.
+  // Comments derive from document fields, so a crafted name containing
+  // `*/` must not break out of `/* ... */` and corrupt the document.
   const text = buildPbxproj({
     objects: {
       F1: { isa: "PBXFileReference", name: "evil */ injected", path: "App.swift", sourceTree: "<group>" },
@@ -203,7 +203,7 @@ test("exception sets and target dependencies use Xcode's comment forms", () => {
 });
 
 test("cyclic build-file references terminate with a null comment", () => {
-  // Malformed projects can point build files at each other; comment
+  // Malformed projects can point build files at each other, so comment
   // derivation must fall back instead of recursing until stack overflow.
   const text = buildPbxproj({
     objects: {

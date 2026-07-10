@@ -95,8 +95,8 @@ function repoNameFromUrl(repoUrl: string): string {
  * Builds the uuid-to-comment map for a parsed project document.
  *
  * Objects that should render without a comment (unnamed groups) map to the
- * empty string; uuids absent from the map are not references at all.
- * Derivation is linear over the object graph: reverse indexes are built in
+ * empty string, and uuids absent from the map are not references at all.
+ * Derivation is linear over the object graph. Reverse indexes are built in
  * one pass, and every object's comment is computed once and cached.
  */
 export function createReferenceComments(root: PbxprojValue): Map<string, string> {
@@ -136,8 +136,9 @@ export function createReferenceComments(root: PbxprojValue): Map<string, string>
       }
     }
 
-    // File-system-synchronized groups list their exception sets, and targets
-    // list their build phases; both indexes serve the exception-set comments.
+    // File-system-synchronized groups list their exception sets, and
+    // targets list their build phases. Both indexes serve the
+    // exception-set comments.
     indexFirst(syncGroupByExceptionSet, owner["exceptions"], owner);
     indexFirst(targetByBuildPhase, owner["buildPhases"], owner);
 
@@ -165,9 +166,9 @@ export function createReferenceComments(root: PbxprojValue): Map<string, string>
 
   /**
    * Comment for a `PBXFileSystemSynchronizedBuildFileExceptionSet`,
-   * matching current Xcode: `Exceptions for "clip" folder in "clip"
-   * target`. Falls back to the isa when the folder or target cannot be
-   * resolved (older documents and hand-edited graphs).
+   * matching current Xcode, for example `Exceptions for "clip" folder in
+   * "clip" target`. Falls back to the isa when the folder or target cannot
+   * be resolved (older documents and hand-edited graphs).
    */
   const buildFileExceptionSetComment = (id: string, set: PbxprojObject): string | undefined => {
     const folder = exceptionSetFolderName(id);
@@ -182,9 +183,9 @@ export function createReferenceComments(root: PbxprojValue): Map<string, string>
 
   /**
    * Comment for a `PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet`,
-   * matching current Xcode: `Exceptions for "Tophat" folder in "CopyFiles"
-   * phase from "Tophat" target`. Falls back to the isa when any of the
-   * three names cannot be resolved.
+   * matching current Xcode, for example `Exceptions for "Tophat" folder in
+   * "CopyFiles" phase from "Tophat" target`. Falls back to the isa when
+   * any of the three names cannot be resolved.
    */
   const membershipExceptionSetComment = (id: string, set: PbxprojObject): string | undefined => {
     const folder = exceptionSetFolderName(id);
@@ -237,7 +238,7 @@ export function createReferenceComments(root: PbxprojValue): Map<string, string>
       return `Build configuration list for ${isa} "${ownName}"`;
     }
 
-    // A PBXProject has no name of its own; borrow the first target's.
+    // A PBXProject has no name of its own, so borrow the first target's.
     const targets = owner["targets"];
     if (Array.isArray(targets)) {
       const firstTargetId = targets.find((target): target is string => typeof target === "string");

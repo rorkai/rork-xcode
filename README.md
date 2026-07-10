@@ -275,7 +275,7 @@ Underneath, the document is a plain tree of elements with ordered attributes and
 
 ## Xcconfig files
 
-Build settings do not only live in the pbxproj. Projects push them into `.xcconfig` files referenced through `baseConfigurationReference`, and the xcconfig module reads and writes that format with the fidelity the rest of the library promises. The format is hand-authored with no canonical layout, so the contract here is losslessness: parsing and building an untouched file reproduces it byte for byte — comments, blank lines, column alignment, and line endings included. Malformed lines fail loudly with a typed error carrying line and column rather than being dropped, so a file the parser accepts is a file it fully understood.
+Build settings do not only live in the pbxproj. Projects push them into `.xcconfig` files referenced through `baseConfigurationReference`, and the xcconfig module reads and writes that format with the fidelity the rest of the library promises. The format is hand-authored with no canonical layout, so the contract here is losslessness. Parsing and building an untouched file reproduces it byte for byte, including comments, blank lines, column alignment, and line endings. Malformed lines fail loudly with a typed error carrying line and column rather than being dropped, so a file the parser accepts is a file it fully understood.
 
 `Xcconfig` is the model. Reads follow the file top to bottom the way Xcode does, and writes edit single lines while leaving every other byte alone:
 
@@ -307,7 +307,7 @@ const settings = config.settings({
 });
 ```
 
-Registering a file on the project makes `getBuildSetting` resolve through it in Xcode's order — target settings, the target's xcconfig, project settings, the project's xcconfig:
+Registering a file on the project makes `getBuildSetting` resolve through it in Xcode's order of target settings, then the target's xcconfig, then project settings, then the project's xcconfig:
 
 ```ts
 project.registerXcconfig(reference, Xcconfig.parse(text));
@@ -343,7 +343,7 @@ Measured on an Apple M5 Max, Node.js 24, single thread, with `@bacons/xcode` 1.0
 ## Verification
 
 - The committed fixture corpus spans project generations from Xcode 3 to Xcode 16, captured from real projects with identifiers neutralized: synchronized folders with both exception-set kinds, classic groups, variant groups, aggregate and legacy targets, reference proxies, build rules, Swift packages, and a ~100 KiB multiplatform framework project.
-- Documents already in current Xcode's layout must round-trip byte for byte; documents from other tool generations must normalize to a byte-stable fixed point with unchanged values.
+- Documents already in current Xcode's layout must round-trip byte for byte, and documents from other tool generations must normalize to a byte-stable fixed point with unchanged values.
 - On macOS, the suite cross-validates every fixture and its rebuilt form with `plutil`, Apple's own property list parser and the empirical ground truth for what Apple tooling accepts.
 - A corpus sweep (`pnpm corpus`) walks every Xcode project, scheme, and xcconfig on the machine, verifies each one parses and reaches a byte-stable fixed point (byte-exact losslessness for xcconfig, which has no canonical layout), exercises the object model against every project, and cross-validates a sample against plutil's own reading.
 - CI runs the full gate on Linux and macOS, and executes the built artifact on the oldest supported Node to enforce the `engines` floor.

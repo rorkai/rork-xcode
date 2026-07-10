@@ -13,9 +13,10 @@
  * NeXTSTEP character set for byte values 0x80-0xFF, indexed by `byte - 0x80`.
  *
  * Octal escapes are how pre-Unicode NeXTSTEP text encoded non-ASCII
- * characters; mapping them through this table is what makes `\341` decode to
- * `Æ` instead of the Latin-1 `á`. Values are Unicode code points, per the
- * published NEXTSTEP.TXT vendor mapping in the Unicode Character Database.
+ * characters, and mapping them through this table is what makes `\341`
+ * decode to `Æ` instead of the Latin-1 `á`. Values are Unicode code
+ * points, per the published NEXTSTEP.TXT vendor mapping in the Unicode
+ * Character Database.
  */
 // prettier-ignore
 const NEXT_STEP_MAPPINGS: readonly number[] = [
@@ -40,8 +41,8 @@ const NEXT_STEP_MAPPINGS: readonly number[] = [
 /**
  * Maps an octal escape value to its Unicode code point.
  *
- * Values below 0x80 are ASCII and pass through; values in 0x80-0xFF select
- * from the NeXTSTEP character set.
+ * Values below 0x80 are ASCII and pass through, while values in 0x80-0xFF
+ * select from the NeXTSTEP character set.
  */
 function nextStepToUnicode(code: number): number {
   if (code < 0x80 || code > 0xff) {
@@ -100,7 +101,7 @@ function readUnicodeEscape(input: string, index: number): [text: string, next: n
     }
   }
   const code = Number.parseInt(hex, 16);
-  // A lone surrogate is not a character; drop it rather than emit an
+  // A lone surrogate is not a character, so drop it rather than emit an
   // unpaired UTF-16 unit that would poison later encoding.
   return [code < 0xd800 || code > 0xdfff ? String.fromCharCode(code) : "", index + 6];
 }
