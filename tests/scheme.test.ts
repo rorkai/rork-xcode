@@ -227,7 +227,7 @@ describe("target rename", () => {
     expect(built).toContain('BlueprintName = "Rocket"');
     expect(built).toContain('BuildableName = "Rocket.app"');
     expect(built).not.toContain('BlueprintName = "DemoApp"');
-    // The test bundle is a different target; its stem must not rename.
+    // The test bundle is a different target, so its stem must not rename.
     expect(built).toContain('BlueprintName = "DemoAppTests"');
     expect(built).toContain('BuildableName = "DemoAppTests.xctest"');
     // Containers name the .xcodeproj directory, not the target.
@@ -251,7 +251,7 @@ describe("target rename", () => {
     const built = scheme.build();
     expect(built).toContain('ReferencedContainer = "container:Rocket.xcodeproj"');
     expect(built).not.toContain("container:DemoApp.xcodeproj");
-    // Target names stay; renaming the container is a separate move.
+    // Target names stay, because renaming the container is a separate move.
     expect(built).toContain('BlueprintName = "DemoApp"');
   });
 });

@@ -208,7 +208,7 @@ project.referrersOf(app.id); // every object referencing an id, for custom teard
 
 ### Renaming
 
-`renameTarget` renames a target and every place the document knows it by name: the target's `name` and `productName`, its product file reference, the `remoteInfo` of container proxies pointing at it, `TEST_TARGET_NAME` values naming it, and the path segments of `TEST_HOST` and `BUNDLE_LOADER` that name the target or its product. Names match whole, so renaming `DemoApp` leaves `DemoAppTests` alone, and a `PRODUCT_NAME` of `$(TARGET_NAME)` follows by itself. On-disk renames (source folders, entitlements files) and the group paths pointing at those folders stay with the caller.
+`renameTarget` renames a target and every place the document knows it by name. That covers the target's `name` and `productName`, its product file reference, the `remoteInfo` of container proxies pointing at it, `TEST_TARGET_NAME` values naming it, and the path segments of `TEST_HOST` and `BUNDLE_LOADER` that name the target or its product. Names match whole, so renaming `DemoApp` leaves `DemoAppTests` alone, and a `PRODUCT_NAME` of `$(TARGET_NAME)` follows by itself. On-disk renames (source folders, entitlements files) and the group paths pointing at those folders stay with the caller.
 
 ```ts
 const app = project.findMainAppTarget("ios");
@@ -246,7 +246,7 @@ for (const [id, object] of project.objects()) {
 
 `.xcscheme` files describe how Xcode builds, runs, tests, and archives a target. They are not property lists but a small XML dialect of their own, and the scheme module covers it with the same contract as the pbxproj functions. An Xcode-written scheme rebuilds byte for byte, any other input reaches Xcode's canonical layout in one build, and malformed input fails with a typed error carrying line and column.
 
-`Xcscheme` is the model. Renames are one call per move: `renameTarget` is the scheme-file side of the project model's `renameTarget` and touches only the named target's references, and `renameContainer` follows a rename of the `.xcodeproj` directory itself. Both return whether anything changed, so callers can skip rewriting untouched files:
+`Xcscheme` is the model. Renames are one call per move. `renameTarget` is the scheme-file side of the project model's `renameTarget` and touches only the named target's references, and `renameContainer` follows a rename of the `.xcodeproj` directory itself. Both return whether anything changed, so callers can skip rewriting untouched files:
 
 ```ts
 import { Xcscheme } from "rork-xcode";

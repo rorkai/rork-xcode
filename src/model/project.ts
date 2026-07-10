@@ -714,13 +714,13 @@ export class XcodeProject {
    * segments of `TEST_HOST` and `BUNDLE_LOADER` settings that name the
    * target or its product. A `PRODUCT_NAME` of the target's own
    * configurations is rewritten only when it spells the old name
-   * literally; the usual `$(TARGET_NAME)` follows by itself.
+   * literally. The usual `$(TARGET_NAME)` follows by itself.
    *
    * Scheme files live outside the pbxproj, so buildable references are
    * renamed separately through `Xcscheme.renameTarget`. On-disk renames
    * (source folders, entitlements files) and the group paths pointing at
-   * those folders stay with the caller, which is also where sibling
-   * targets like `OldNameTests` are further `renameTarget` calls.
+   * those folders stay with the caller. Sibling targets such as
+   * `OldNameTests` are renamed with their own calls.
    *
    * @throws XcodeModelError when the target belongs to another project.
    */

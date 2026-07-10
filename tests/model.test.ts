@@ -679,7 +679,7 @@ describe("target rename", () => {
     expect(app.getString("productName")).toBe("Rocket");
     expect(app.productReference?.path).toBe("Rocket.app");
 
-    // Test bundles keep working against the renamed host: the unit test
+    // Test bundles keep working against the renamed host. The unit test
     // host path renames per segment, the UI test target name renames
     // whole, and the dependency proxies' display names follow.
     const tests = project.findTarget("SampleAppTests");
@@ -691,7 +691,7 @@ describe("target rename", () => {
     expect(uiTests.getBuildSetting("TEST_TARGET_NAME")).toBe("Rocket");
     expect(tests.dependencies()[0]?.targetProxy()?.remoteInfo).toBe("Rocket");
 
-    // Sibling products own their names; the stem match must not treat
+    // Sibling products own their names. The stem match must not treat
     // SampleAppTests.xctest as the renamed target's product.
     expect(tests.productReference?.path).toBe("SampleAppTests.xctest");
 
