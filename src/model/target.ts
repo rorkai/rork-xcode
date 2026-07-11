@@ -12,6 +12,7 @@
  * @module
  */
 
+import { expandBuildSettingReferences } from "../expansion";
 import { embedDestinationFor, Isa, ProductType } from "./isa";
 import { XcodeObject } from "./object";
 import {
@@ -32,11 +33,23 @@ import {
 import { configurationsOf, defaultConfigurationOf, defaultConfigurationSettingsOf } from "./settings";
 import { asDictionary, asString, ensureArray, stringItems } from "./values";
 
+import type { BuildSettingLookup } from "../expansion";
 import type { PbxprojObject } from "../types";
 import type { BuildPhaseIsa } from "./isa";
 import type { BuildConfiguration } from "./objects";
 import type { BuildPhaseOf } from "./project";
 import type { LegacyTargetProperties, NativeTargetProperties, TargetProperties } from "./properties";
+
+export interface ResolveBuildSettingOptions {
+  /**
+   * Answers references the document itself cannot, for example
+   * `$(BUILT_PRODUCTS_DIR)` when the caller knows the build layout. The
+   * lookup is consulted after the setting layers and before the built-in
+   * `$(TARGET_NAME)` fallback, and a reference it leaves unanswered
+   * stays verbatim in the result.
+   */
+  lookup?: BuildSettingLookup;
+}
 
 /**
  * The behavior every target kind shares. A target of any kind carries
@@ -119,6 +132,79 @@ export class Target<Properties extends TargetProperties = TargetProperties> exte
     const projectXcconfig =
       projectConfiguration == null ? undefined : this.project.xcconfigSettingsOf(projectConfiguration);
     return projectXcconfig?.[key];
+  }
+
+  /**
+   * Reads a build setting like {@link getBuildSetting} and expands the
+   * `$(NAME)` and `${NAME}` references in it. Referenced settings resolve
+   * through the same layering, `$(inherited)` and a setting referencing
+   * itself continue from the next layer down the way Xcode composes
+   * values, and `$(TARGET_NAME)` falls back to the target's name, so the
+   * common `PRODUCT_NAME = "$(TARGET_NAME)"` resolves without any caller
+   * setup.
+   *
+   * References the model cannot resolve (build-system paths like
+   * `$(BUILT_PRODUCTS_DIR)`, environment values) stay in the result
+   * verbatim unless the caller's lookup answers them, so no information
+   * is invented. See {@link expandBuildSettingReferences} for the
+   * operator forms honored during expansion.
+   */
+  resolveBuildSetting(key: string, options?: ResolveBuildSettingOptions): string | undefined {
+    // The layers materialize eagerly here instead of sharing the
+    // early-exit reads of getBuildSetting, because expansion may visit
+    // several layers per reference and the simple shape matters more
+    // than saving two dictionary reads.
+    const targetConfiguration = defaultConfigurationOf(this.project, this.getString("buildConfigurationList"));
+    const projectConfiguration = defaultConfigurationOf(
+      this.project,
+      this.project.rootProject.getString("buildConfigurationList"),
+    );
+    const layers: (PbxprojObject | Record<string, string> | undefined)[] = [
+      asDictionary(targetConfiguration?.properties["buildSettings"]),
+      targetConfiguration == null ? undefined : this.project.xcconfigSettingsOf(targetConfiguration),
+      asDictionary(projectConfiguration?.properties["buildSettings"]),
+      projectConfiguration == null ? undefined : this.project.xcconfigSettingsOf(projectConfiguration),
+    ];
+
+    // Guards are per name and starting layer, so an inherited chain of
+    // the same name walks down the layers freely while a pair of
+    // settings referencing each other stays finite.
+    const resolve = (name: string, fromLayer: number, active: ReadonlySet<string>): string | undefined => {
+      const guard = `${fromLayer}:${name}`;
+      if (active.has(guard)) {
+        return undefined;
+      }
+      const nested = new Set(active);
+      nested.add(guard);
+
+      for (let layer = fromLayer; layer < layers.length; layer++) {
+        const settings = layers[layer];
+        if (settings == null || !(name in settings)) {
+          continue;
+        }
+        const value = asString(settings[name]);
+        if (value == null) {
+          return undefined;
+        }
+        // Lookup answers come back fully resolved, so the expander must
+        // not reinterpret references they deliberately left verbatim.
+        return expandBuildSettingReferences(
+          value,
+          (reference) => {
+            if (reference === "inherited" || reference === name) {
+              // Nothing below the last layer means inherited adds
+              // nothing, which is how Xcode splices an empty chain.
+              return resolve(name, layer + 1, nested) ?? "";
+            }
+            return resolve(reference, 0, nested) ?? options?.lookup?.(reference) ?? builtinSetting(this, reference);
+          },
+          { expandLookupValues: false },
+        );
+      }
+      return undefined;
+    };
+
+    return resolve(key, 0, new Set());
   }
 
   /**
@@ -274,6 +360,16 @@ export class Target<Properties extends TargetProperties = TargetProperties> exte
     ensureArray(this.properties, "dependencies").push(targetDependency.id);
     return targetDependency;
   }
+}
+
+/**
+ * The settings the build system defines from the target itself rather
+ * than from the document. `TARGET_NAME` is the one programmatic reads
+ * meet constantly, through the template's `PRODUCT_NAME` of
+ * `$(TARGET_NAME)`.
+ */
+function builtinSetting(target: Target, name: string): string | undefined {
+  return name === "TARGET_NAME" ? target.name : undefined;
 }
 
 /**

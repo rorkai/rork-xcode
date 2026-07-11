@@ -946,6 +946,107 @@ describe("xcconfig layering", () => {
   });
 });
 
+describe("resolving build settings", () => {
+  it("expands the template's PRODUCT_NAME without caller setup", () => {
+    const project = openApp();
+    const app = project.findMainAppTarget("ios");
+    assert(app);
+
+    expect(app.getBuildSetting("PRODUCT_NAME")).toBe("$(TARGET_NAME)");
+    expect(app.resolveBuildSetting("PRODUCT_NAME")).toBe("SampleApp");
+  });
+
+  it("resolves references through the setting layers", () => {
+    const project = openApp();
+    const app = project.findMainAppTarget("ios");
+    assert(app);
+
+    app.setBuildSetting("PRODUCT_BUNDLE_IDENTIFIER", "com.example.demo");
+    app.setBuildSetting("WIDGET_ID", "$(PRODUCT_BUNDLE_IDENTIFIER).widget");
+    expect(app.resolveBuildSetting("WIDGET_ID")).toBe("com.example.demo.widget");
+  });
+
+  it("continues inherited chains from the next layer down", () => {
+    const project = openApp();
+    const app = project.findMainAppTarget("ios");
+    assert(app);
+
+    // The fixture's project level defines no OTHER_SWIFT_FLAGS, so set
+    // both levels explicitly and let the target splice the project's.
+    const projectList = project.get(project.rootProject.getString("buildConfigurationList"));
+    assert(ConfigurationList.is(projectList));
+    for (const configuration of projectList.configurations()) {
+      const settings = configuration.buildSettings;
+      assert(settings);
+      settings["OTHER_SWIFT_FLAGS"] = "-DBASE";
+    }
+    app.setBuildSetting("OTHER_SWIFT_FLAGS", "$(inherited) -DAPP");
+
+    expect(app.resolveBuildSetting("OTHER_SWIFT_FLAGS")).toBe("-DBASE -DAPP");
+  });
+
+  it("splices an empty chain when nothing is inherited", () => {
+    const project = openApp();
+    const app = project.findMainAppTarget("ios");
+    assert(app);
+
+    app.setBuildSetting("HEADER_SEARCH_PATHS", "$(inherited) Vendor");
+    expect(app.resolveBuildSetting("HEADER_SEARCH_PATHS")).toBe(" Vendor");
+  });
+
+  it("resolves through registered xcconfig layers", () => {
+    const project = openApp();
+    const app = project.findMainAppTarget("ios");
+    assert(app);
+
+    const reference = project.add(
+      Isa.fileReference,
+      { lastKnownFileType: "text.xcconfig", path: "Config/App.xcconfig", sourceTree: "<group>" },
+      "resolution xcconfig",
+    );
+    for (const configuration of app.buildConfigurations()) {
+      configuration.set("baseConfigurationReference", reference.id);
+    }
+    project.registerXcconfig(reference, Xcconfig.parse("BUNDLE_PREFIX = com.example\n"));
+
+    app.setBuildSetting("PRODUCT_BUNDLE_IDENTIFIER", "$(BUNDLE_PREFIX).$(TARGET_NAME:lower)");
+    expect(app.resolveBuildSetting("PRODUCT_BUNDLE_IDENTIFIER")).toBe("com.example.sampleapp");
+  });
+
+  it("keeps unresolvable references verbatim unless the caller answers them", () => {
+    const project = openApp();
+    const tests = project.findTarget("SampleAppTests");
+    assert(tests);
+
+    expect(tests.resolveBuildSetting("TEST_HOST")).toBe(
+      "$(BUILT_PRODUCTS_DIR)/SampleApp.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/SampleApp",
+    );
+    expect(
+      tests.resolveBuildSetting("TEST_HOST", {
+        lookup: (name) => (name === "BUILT_PRODUCTS_DIR" ? "/build/Debug-iphoneos" : undefined),
+      }),
+    ).toBe("/build/Debug-iphoneos/SampleApp.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/SampleApp");
+  });
+
+  it("stays finite on settings that reference each other", () => {
+    const project = openApp();
+    const app = project.findMainAppTarget("ios");
+    assert(app);
+
+    app.setBuildSetting("A", "$(B)");
+    app.setBuildSetting("B", "$(A)");
+    expect(app.resolveBuildSetting("A")).toBe("$(A)");
+  });
+
+  it("returns undefined for settings no layer defines", () => {
+    const project = openApp();
+    const app = project.findMainAppTarget("ios");
+    assert(app);
+
+    expect(app.resolveBuildSetting("NOT_A_SETTING")).toBeUndefined();
+  });
+});
+
 describe("parseApplePlatform", () => {
   it("normalizes casing, separators, and SDK names to platforms", () => {
     expect(parseApplePlatform("ios")).toBe("ios");

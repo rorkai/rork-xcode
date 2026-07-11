@@ -12,17 +12,6 @@ is a candidate for first-class API.
 
 ## Near term
 
-### Build-setting reference expansion
-
-Values like `$(PRODUCT_BUNDLE_IDENTIFIER).widget` appear in build settings
-and in Info.plist templates, and every consumer that needs the resolved
-string re-implements the expansion informally. A small
-`expandBuildSettingReferences(value, lookup)` should handle `$(VAR)` and
-`${VAR}` forms, recursive expansion, and `$(inherited)` chains, so it
-composes with the settings resolution the xcconfig module shipped.
-
-## Mid term
-
 ### Workspace files
 
 `contents.xcworkspacedata` is the remaining member of the file-format family
@@ -40,11 +29,10 @@ into CI.
 
 ## Toward 1.0
 
-The isa vocabulary is complete and the mutation surface has stabilized, so
-1.0 is less about features and more about formalizing the contract:
+The isa vocabulary is complete and the settings, rename, and expansion
+surfaces have stabilized, so 1.0 is less about features and more about
+formalizing the contract:
 
-- Reference expansion above lands, since it may still reshape parts of the
-  settings API.
 - One documentation pass over the public surface, with the README examples
   verified against the shipped types.
 - From 1.0 on, semver majors gate every breaking change, including
