@@ -328,9 +328,13 @@ Values reference other build settings as `$(NAME)` and `${NAME}`, in the pbxproj
 ```ts
 import { expandBuildSettingReferences } from "rork-xcode";
 
-expandBuildSettingReferences("com.example.$(PRODUCT_NAME:rfc1034identifier)", (name) =>
-  name === "PRODUCT_NAME" ? "My App" : undefined,
-); // "com.example.My-App"
+// A value as found in a project file. The references and their operators
+// are part of the document, so the expander takes them from the text
+// rather than from options.
+const found = "com.example.$(PRODUCT_NAME:rfc1034identifier)";
+
+expandBuildSettingReferences(found, (name) => (name === "PRODUCT_NAME" ? "My App" : undefined));
+// "com.example.My-App"
 ```
 
 The `:` operators are honored for `lower`, `upper`, `rfc1034identifier` (the mapping into RFC 1034 host-name characters that bundle identifiers need), `c99extidentifier`, and `default=`. A reference carrying any other operator stays verbatim rather than expanding to a wrongly transformed value. The model composes the expander with settings resolution as `target.resolveBuildSetting(key)`, described under [Targets and build settings](#targets-and-build-settings).
