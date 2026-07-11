@@ -56,6 +56,7 @@ export function expandBuildSettingReferences(
   return expand(value, lookup, options?.expandLookupValues !== false, new Set());
 }
 
+/** The UTF-16 code unit of `$`, which starts every reference. */
 const CODE_DOLLAR = 36;
 
 /**
@@ -193,21 +194,38 @@ function splitOperators(operators: string): string[] {
 }
 
 /**
+ * The transforming operators the expander supports, keyed by the name
+ * they are written with. `default=` is not listed because it carries an
+ * argument and substitutes rather than transforms, so the reference
+ * expansion handles it structurally.
+ */
+const OPERATOR_TRANSFORMS = {
+  c99extidentifier: (value: string) => value.replaceAll(/[^A-Za-z0-9_]/gu, "_"),
+  lower: (value: string) => value.toLowerCase(),
+  rfc1034identifier: (value: string) => value.replaceAll(/[^A-Za-z0-9-]/gu, "-"),
+  upper: (value: string) => value.toUpperCase(),
+} satisfies Record<string, (value: string) => string>;
+
+/**
+ * A transforming operator name honored in `$(NAME:operator)` references,
+ * alongside the structural `default=`.
+ */
+export type BuildSettingOperator = keyof typeof OPERATOR_TRANSFORMS;
+
+/**
+ * Whether a parsed operator names one of the supported transforms. The
+ * check is an own-property test, so document text like `toString` cannot
+ * reach the table's prototype.
+ */
+function isBuildSettingOperator(operator: string): operator is BuildSettingOperator {
+  return Object.hasOwn(OPERATOR_TRANSFORMS, operator);
+}
+
+/**
  * Applies one operator to a resolved value, or returns `undefined` for
- * operators the expander does not know, which the caller turns into a
- * verbatim reference.
+ * operators outside {@link BuildSettingOperator}, which the caller turns
+ * into a verbatim reference.
  */
 function applyOperator(operator: string, value: string): string | undefined {
-  switch (operator) {
-    case "lower":
-      return value.toLowerCase();
-    case "upper":
-      return value.toUpperCase();
-    case "rfc1034identifier":
-      return value.replaceAll(/[^A-Za-z0-9-]/gu, "-");
-    case "c99extidentifier":
-      return value.replaceAll(/[^A-Za-z0-9_]/gu, "_");
-    default:
-      return undefined;
-  }
+  return isBuildSettingOperator(operator) ? OPERATOR_TRANSFORMS[operator](value) : undefined;
 }

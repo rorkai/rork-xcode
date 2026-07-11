@@ -26,7 +26,12 @@ export {
   XcschemeParseError,
   type PbxprojErrorPosition,
 } from "./errors";
-export { expandBuildSettingReferences, type BuildSettingLookup, type ExpandBuildSettingOptions } from "./expansion";
+export {
+  expandBuildSettingReferences,
+  type BuildSettingLookup,
+  type BuildSettingOperator,
+  type ExpandBuildSettingOptions,
+} from "./expansion";
 export {
   CopyFilesDestination,
   Isa,
