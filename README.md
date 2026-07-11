@@ -323,7 +323,7 @@ app.getBuildSetting("SDKROOT"); // now sees values the xcconfig defines
 
 ## Build-setting references
 
-Values reference other build settings as `$(NAME)` and `${NAME}`, in the pbxproj, in xcconfig files, and in Info.plist templates. `expandBuildSettingReferences` expands them through a caller-supplied lookup, so the same code serves all three formats. Substituted text expands recursively, names may themselves contain references (`$(SETTING_$(VARIANT))`), cycles stay finite, and a reference the lookup cannot answer stays verbatim, so partial resolution loses no information.
+Values reference other build settings as `$(NAME)` and `${NAME}`, in the pbxproj, in xcconfig files, and in Info.plist templates. The syntax is Xcode's own, down to the `:` operators, and Xcode's app templates write values in exactly this shape, for example `PRODUCT_BUNDLE_IDENTIFIER = com.yourcompany.$(PRODUCT_NAME:rfc1034identifier)`. `expandBuildSettingReferences` evaluates the syntax through a caller-supplied lookup, so the same code serves all three formats. Substituted text expands recursively, names may themselves contain references (`$(SETTING_$(VARIANT))`), cycles stay finite, and a reference the lookup cannot answer stays verbatim, so partial resolution loses no information.
 
 ```ts
 import { expandBuildSettingReferences } from "rork-xcode";
@@ -333,7 +333,7 @@ expandBuildSettingReferences("com.example.$(PRODUCT_NAME:rfc1034identifier)", (n
 ); // "com.example.My-App"
 ```
 
-Xcode's `:` operators are honored for `lower`, `upper`, `rfc1034identifier`, `c99extidentifier`, and `default=`. A reference carrying any other operator stays verbatim rather than expanding to a wrongly transformed value. The model composes the expander with settings resolution as `target.resolveBuildSetting(key)`, described under [Targets and build settings](#targets-and-build-settings).
+The `:` operators are honored for `lower`, `upper`, `rfc1034identifier` (the mapping into RFC 1034 host-name characters that bundle identifiers need), `c99extidentifier`, and `default=`. A reference carrying any other operator stays verbatim rather than expanding to a wrongly transformed value. The model composes the expander with settings resolution as `target.resolveBuildSetting(key)`, described under [Targets and build settings](#targets-and-build-settings).
 
 ## Performance
 
