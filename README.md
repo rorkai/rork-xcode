@@ -100,7 +100,7 @@ const text = project.build();
 
 ### Targets and build settings
 
-`getBuildSetting` resolves hierarchically the way Xcode does: the target's default configuration first, then the project-level configuration. Writes go to every configuration of the target, so Debug and Release stay consistent.
+`getBuildSetting` resolves hierarchically the way Xcode does, reading the target's default configuration first and the project-level configuration below it. Writes go to every configuration of the target, so Debug and Release stay consistent.
 
 ```ts
 const app = project.findMainAppTarget("ios"); // "macos" | "tvos" | "watchos" | "visionos"
@@ -112,6 +112,13 @@ app?.removeBuildSetting("CODE_SIGN_IDENTITY");
 for (const target of project.nativeTargets()) {
   console.log(target.name, target.productType);
 }
+```
+
+`resolveBuildSetting` reads the same layers and expands the `$(NAME)` and `${NAME}` references in the value. Referenced settings resolve through the chain, `$(inherited)` continues from the next layer down, and `$(TARGET_NAME)` falls back to the target's name, so the template's `PRODUCT_NAME = "$(TARGET_NAME)"` resolves without any setup. References the document cannot answer (build-system paths like `$(BUILT_PRODUCTS_DIR)`) stay verbatim unless a caller-supplied lookup answers them, so nothing is invented.
+
+```ts
+app?.resolveBuildSetting("PRODUCT_NAME"); // "DemoApp", from PRODUCT_NAME = "$(TARGET_NAME)"
+app?.resolveBuildSetting("WIDGET_ID"); // "com.example.demo.widget", through PRODUCT_BUNDLE_IDENTIFIER
 ```
 
 `project.targets()` returns every target kind. Aggregate targets (`PBXAggregateTarget`) and legacy external-build-tool targets (`PBXLegacyTarget`) share the full target surface, from configurations and build settings to phases and dependency wiring.
@@ -313,6 +320,20 @@ Registering a file on the project makes `getBuildSetting` resolve through it in 
 project.registerXcconfig(reference, Xcconfig.parse(text));
 app.getBuildSetting("SDKROOT"); // now sees values the xcconfig defines
 ```
+
+## Build-setting references
+
+Values reference other build settings as `$(NAME)` and `${NAME}`, in the pbxproj, in xcconfig files, and in Info.plist templates. `expandBuildSettingReferences` expands them through a caller-supplied lookup, so the same code serves all three formats. Substituted text expands recursively, names may themselves contain references (`$(SETTING_$(VARIANT))`), cycles stay finite, and a reference the lookup cannot answer stays verbatim, so partial resolution loses no information.
+
+```ts
+import { expandBuildSettingReferences } from "rork-xcode";
+
+expandBuildSettingReferences("com.example.$(PRODUCT_NAME:rfc1034identifier)", (name) =>
+  name === "PRODUCT_NAME" ? "My App" : undefined,
+); // "com.example.My-App"
+```
+
+Xcode's `:` operators are honored for `lower`, `upper`, `rfc1034identifier`, `c99extidentifier`, and `default=`. A reference carrying any other operator stays verbatim rather than expanding to a wrongly transformed value. The model composes the expander with settings resolution as `target.resolveBuildSetting(key)`, described under [Targets and build settings](#targets-and-build-settings).
 
 ## Performance
 

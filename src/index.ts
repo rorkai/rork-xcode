@@ -26,6 +26,7 @@ export {
   XcschemeParseError,
   type PbxprojErrorPosition,
 } from "./errors";
+export { expandBuildSettingReferences, type BuildSettingLookup, type ExpandBuildSettingOptions } from "./expansion";
 export {
   CopyFilesDestination,
   Isa,
@@ -75,7 +76,7 @@ export {
   type ViewByIsa,
   type ViewOf,
 } from "./model/project";
-export { AggregateTarget, LegacyTarget, NativeTarget, Target } from "./model/target";
+export { AggregateTarget, LegacyTarget, NativeTarget, Target, type ResolveBuildSettingOptions } from "./model/target";
 export { parsePbxproj } from "./parse";
 export { buildXcscheme } from "./scheme/build";
 export {
