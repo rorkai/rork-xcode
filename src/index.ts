@@ -27,6 +27,7 @@ export {
   XcworkspaceBuildError,
   XcworkspaceParseError,
   type PbxprojErrorPosition,
+  type TextPosition,
 } from "./errors";
 export {
   expandBuildSettingReferences,

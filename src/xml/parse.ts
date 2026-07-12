@@ -77,6 +77,23 @@ const NAMED_ENTITIES: Readonly<Record<string, string>> = {
 };
 
 /**
+ * Whether a code point is a character XML 1.0 allows in a document.
+ * The excluded ranges are the control characters other than tab, line
+ * feed, and carriage return, the surrogate halves, and the two
+ * noncharacters at the end of the basic plane.
+ */
+export function isXmlChar(codePoint: number): boolean {
+  return (
+    codePoint === CODE_TAB ||
+    codePoint === CODE_LINE_FEED ||
+    codePoint === CODE_CARRIAGE_RETURN ||
+    (codePoint >= 0x20 && codePoint <= 0xd7ff) ||
+    (codePoint >= 0xe000 && codePoint <= 0xfffd) ||
+    (codePoint >= 0x10000 && codePoint <= 0x10ffff)
+  );
+}
+
+/**
  * Parses the text of a document in the dialect into its node tree,
  * reporting failures through the given error factory.
  */
@@ -143,11 +160,17 @@ class Parser {
   /**
    * Skips the `<?xml ... ?>` declaration when present. Its attributes are
    * not retained, since the writer always emits the canonical UTF-8
-   * declaration.
+   * declaration. Other processing instructions fail, because the dialect
+   * has no place to keep them and dropping one silently would make the
+   * round-trip lossy.
    */
   private skipDeclaration(): void {
     if (this.input.charCodeAt(this.pos) !== CODE_LESS_THAN || this.input.charCodeAt(this.pos + 1) !== CODE_QUESTION) {
       return;
+    }
+    const after = this.input.charCodeAt(this.pos + 5);
+    if (this.input.slice(this.pos + 2, this.pos + 5) !== "xml" || (!isWhitespace(after) && after !== CODE_QUESTION)) {
+      this.fail("Unsupported processing instruction");
     }
     const end = this.input.indexOf("?>", this.pos + 2);
     if (end === -1) {
@@ -255,7 +278,10 @@ class Parser {
 
   /**
    * Parses one comment with the cursor on its `<!--` opener. The text
-   * between the markers is kept verbatim.
+   * between the markers is kept verbatim. A `--` inside the text or a
+   * `-` against the closing marker fails the way XML requires, which
+   * also keeps every accepted comment rebuildable, since such text would
+   * reparse at a different terminator.
    */
   private parseComment(): XmlComment {
     const end = this.input.indexOf("-->", this.pos + 4);
@@ -263,6 +289,9 @@ class Parser {
       this.fail("Unterminated comment");
     }
     const comment = this.input.slice(this.pos + 4, end);
+    if (comment.includes("--") || comment.endsWith("-")) {
+      this.fail("Comments cannot contain -- or end with -");
+    }
     this.pos = end + 3;
     return { comment };
   }
@@ -315,9 +344,41 @@ class Parser {
         value += this.input.slice(runStart, this.pos);
         value += this.parseReference();
         runStart = this.pos;
-      } else {
-        this.pos++;
+        continue;
       }
+      // Raw characters outside XML's character set fail here, so every
+      // value the parser accepts is one the serializer can reproduce.
+      if (code < 0x20 && !isWhitespace(code)) {
+        this.fail("Attribute values cannot contain a raw control character");
+      }
+      if (code >= 0xd800) {
+        this.validateUpperCharacter(code);
+        this.pos += code <= 0xdbff ? 2 : 1;
+        continue;
+      }
+      this.pos++;
+    }
+  }
+
+  /**
+   * Validates a code unit in the surrogate or upper basic-plane range at
+   * the cursor. A high surrogate must pair with a low one, a bare low
+   * surrogate is not a character, and the two noncharacters at the end
+   * of the plane have no XML representation.
+   */
+  private validateUpperCharacter(code: number): void {
+    if (code <= 0xdbff) {
+      const next = this.input.charCodeAt(this.pos + 1);
+      if (Number.isNaN(next) || next < 0xdc00 || next > 0xdfff) {
+        this.fail("Attribute values cannot contain an unpaired surrogate");
+      }
+      return;
+    }
+    if (code <= 0xdfff) {
+      this.fail("Attribute values cannot contain an unpaired surrogate");
+    }
+    if (code === 0xfffe || code === 0xffff) {
+      this.fail("Attribute values cannot contain a noncharacter");
     }
   }
 
@@ -340,10 +401,15 @@ class Parser {
     if (body.charCodeAt(0) === CODE_HASH) {
       const isHex = body.charCodeAt(1) === 0x78 /* x */ || body.charCodeAt(1) === 0x58; /* X */
       const digits = body.slice(isHex ? 2 : 1);
+      // The whole digit run must parse. Number.parseInt would accept a
+      // valid prefix and silently decode &#65junk; as A.
+      if (!(isHex ? /^[0-9A-Fa-f]+$/u : /^[0-9]+$/u).test(digits)) {
+        this.failAt(`Invalid character reference &${body};`, start);
+      }
       const radix = isHex ? 16 : 10;
       const codePoint = Number.parseInt(digits, radix);
-      if (digits.length === 0 || Number.isNaN(codePoint) || codePoint > 0x10ffff) {
-        this.failAt(`Invalid character reference &${body};`, start);
+      if (!isXmlChar(codePoint)) {
+        this.failAt(`Character reference &${body}; is not an XML character`, start);
       }
       return String.fromCodePoint(codePoint);
     }

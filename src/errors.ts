@@ -12,13 +12,14 @@
 const LINE_FEED = 0x0a;
 
 /**
- * Location of a parse failure inside the source text.
+ * Location of a parse failure inside the source text, shared by every
+ * parse error the library throws.
  *
  * Offsets count UTF-16 code units from the start of the string (the same
  * units `String.prototype.slice` uses), so editors and log tooling can jump
  * straight to the failure.
  */
-export interface PbxprojErrorPosition {
+export interface TextPosition {
   /** Zero-based character offset into the source string. */
   offset: number;
 
@@ -30,12 +31,19 @@ export interface PbxprojErrorPosition {
 }
 
 /**
+ * The name {@link TextPosition} carried before the scheme, workspace, and
+ * xcconfig parsers shared it. Kept as an alias so existing annotations
+ * keep compiling.
+ */
+export type PbxprojErrorPosition = TextPosition;
+
+/**
  * Converts a source offset into a position.
  *
  * Runs only when an error is actually thrown, so parsing never pays for line
  * tracking on the happy path.
  */
-function positionAt(source: string, offset: number): PbxprojErrorPosition {
+function positionAt(source: string, offset: number): TextPosition {
   let line = 1;
   let lineStart = 0;
   for (let i = 0; i < offset && i < source.length; i++) {
@@ -57,7 +65,7 @@ function positionAt(source: string, offset: number): PbxprojErrorPosition {
  */
 export class PbxprojParseError extends Error {
   /** Where in the source text parsing failed. */
-  readonly position: PbxprojErrorPosition;
+  readonly position: TextPosition;
 
   /**
    * @param message Failure description without location. The location is
@@ -83,7 +91,7 @@ export class PbxprojParseError extends Error {
  */
 export class XcschemeParseError extends Error {
   /** Where in the source text parsing failed. */
-  readonly position: PbxprojErrorPosition;
+  readonly position: TextPosition;
 
   /**
    * @param message Failure description without location. The location is
@@ -109,7 +117,7 @@ export class XcschemeParseError extends Error {
  */
 export class XcworkspaceParseError extends Error {
   /** Where in the source text parsing failed. */
-  readonly position: PbxprojErrorPosition;
+  readonly position: TextPosition;
 
   /**
    * @param message Failure description without location. The location is
@@ -135,7 +143,7 @@ export class XcworkspaceParseError extends Error {
  */
 export class XcconfigParseError extends Error {
   /** Where in the source text parsing failed. */
-  readonly position: PbxprojErrorPosition;
+  readonly position: TextPosition;
 
   /**
    * @param message Failure description without location. The location is

@@ -9,6 +9,14 @@ function fixture(name: string): string {
   return readFileSync(new URL(`fixtures/${name}`, import.meta.url), "utf-8");
 }
 
+/**
+ * Wraps a value into a minimal workspace document's attribute, so
+ * reference and character validation tests stay on one line each.
+ */
+function attributeDocument(value: string): string {
+  return `<Workspace v = "${value}">\n</Workspace>`;
+}
+
 // One fixture is the flat CocoaPods-style shape, and one exercises
 // nested groups, every location kind, and a non-project reference.
 const FIXTURES = ["workspace-app.xcworkspacedata", "workspace-groups.xcworkspacedata"];
@@ -50,6 +58,46 @@ describe("failure modes", () => {
     const workspace = Xcworkspace.create();
     workspace.root.children.push({ name: "bad name", attributes: {}, children: [] });
     expect(() => workspace.build()).toThrow(XcworkspaceBuildError);
+  });
+
+  it("rejects processing instructions other than the XML declaration", () => {
+    expect(() => parseXcworkspace('<?custom?>\n<Workspace version = "1.0">\n</Workspace>')).toThrow(
+      "Unsupported processing instruction",
+    );
+    expect(() => parseXcworkspace('<?xml-stylesheet href="a.css"?>\n<Workspace>\n</Workspace>')).toThrow(
+      "Unsupported processing instruction",
+    );
+  });
+
+  it("rejects malformed and forbidden character references", () => {
+    expect(() => parseXcworkspace(attributeDocument("&#65junk;"))).toThrow("Invalid character reference");
+    expect(() => parseXcworkspace(attributeDocument("&#0;"))).toThrow("not an XML character");
+    expect(() => parseXcworkspace(attributeDocument("&#xD800;"))).toThrow("not an XML character");
+    expect(() => parseXcworkspace(attributeDocument("&#xFFFF;"))).toThrow("not an XML character");
+    expect(parseXcworkspace(attributeDocument("&#65;")).root.attributes["v"]).toBe("A");
+  });
+
+  it("rejects raw characters XML cannot carry in attribute values", () => {
+    expect(() => parseXcworkspace('<Workspace v = "a\u0001b">\n</Workspace>')).toThrow("raw control character");
+    expect(() => parseXcworkspace('<Workspace v = "a\uFFFFb">\n</Workspace>')).toThrow("noncharacter");
+    expect(() => parseXcworkspace('<Workspace v = "a\uD800b">\n</Workspace>')).toThrow("unpaired surrogate");
+    expect(parseXcworkspace('<Workspace v = "a\u{1F600}b">\n</Workspace>').root.attributes["v"]).toBe("a\u{1F600}b");
+  });
+
+  it("rejects comment text the comment grammar cannot hold", () => {
+    expect(() => parseXcworkspace("<!-- a -- b -->\n<Workspace>\n</Workspace>")).toThrow(
+      "Comments cannot contain -- or end with -",
+    );
+
+    const workspace = Xcworkspace.create();
+    workspace.document.leading.push({ comment: " trailing dash -" });
+    expect(() => workspace.build()).toThrow(XcworkspaceBuildError);
+  });
+
+  it("rejects building attribute values XML cannot carry", () => {
+    const workspace = Xcworkspace.create();
+    workspace.root.attributes["v"] = "a\uFFFEb";
+    expect(() => workspace.build()).toThrow("code point XML cannot carry");
   });
 });
 

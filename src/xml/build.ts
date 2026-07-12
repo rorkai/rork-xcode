@@ -49,19 +49,40 @@ const NAME_PATTERN = /^[A-Za-z_:][A-Za-z0-9_:.-]*$/u;
 const UNENCODABLE_PATTERN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/u;
 
 /**
+ * Matches code units no XML document can carry at all, meaning unpaired
+ * surrogate halves and the two noncharacters at the end of the basic
+ * plane. Escaping cannot help these, so they fail rather than serialize
+ * into a file no parser accepts.
+ */
+const FORBIDDEN_PATTERN = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]|[\uFFFE\uFFFF]/u;
+
+/**
  * Serializes a document to text in Xcode's canonical layout, reporting
  * failures through the given error factory.
  */
 export function buildXmlDocument(document: XmlDocument, makeError: XmlBuildErrorFactory): string {
   let output = XML_DECLARATION;
   for (const comment of document.leading) {
-    output += `<!--${comment.comment}-->\n`;
+    output += renderComment(comment.comment, 0, "document", makeError);
   }
   output += renderElement(document.root, 0, document.root.name, makeError);
   for (const comment of document.trailing) {
-    output += `<!--${comment.comment}-->\n`;
+    output += renderComment(comment.comment, 0, "document", makeError);
   }
   return output;
+}
+
+/**
+ * Renders one comment, failing on text the comment grammar cannot hold.
+ * A `--` inside the text or a `-` against the closing marker would
+ * reparse at a different terminator, so emitting it would corrupt the
+ * document.
+ */
+function renderComment(comment: string, depth: number, path: string, makeError: XmlBuildErrorFactory): string {
+  if (comment.includes("--") || comment.endsWith("-")) {
+    throw makeError("Comments cannot contain -- or end with -", path);
+  }
+  return `${INDENT.repeat(depth)}<!--${comment}-->\n`;
 }
 
 /**
@@ -113,7 +134,7 @@ function renderChildren(children: XmlNode[], depth: number, path: string, makeEr
       seen.set(child.name, index + 1);
       output += renderElement(child, depth, `${path}.${child.name}[${index}]`, makeError);
     } else {
-      output += `${INDENT.repeat(depth)}<!--${child.comment}-->\n`;
+      output += renderComment(child.comment, depth, path, makeError);
     }
   }
   return output;
@@ -132,6 +153,9 @@ function escapeAttribute(value: string, path: string, attributeName: string, mak
       `Attribute ${attributeName} contains the control character U+${unencodable[0].charCodeAt(0).toString(16).padStart(4, "0").toUpperCase()}, which XML cannot encode`,
       path,
     );
+  }
+  if (FORBIDDEN_PATTERN.test(value)) {
+    throw makeError(`Attribute ${attributeName} contains a code point XML cannot carry`, path);
   }
 
   return value
