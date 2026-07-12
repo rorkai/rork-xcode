@@ -37,9 +37,11 @@ import {
   buildPbxproj,
   buildXcconfig,
   buildXcscheme,
+  buildXcworkspace,
   parsePbxproj,
   parseXcconfig,
   parseXcscheme,
+  parseXcworkspace,
   PbxprojParseError,
   ProductType,
   XcodeModelError,
@@ -125,6 +127,7 @@ async function collectProjects(
   paths: string[],
   schemePaths: string[],
   xcconfigPaths: string[],
+  workspacePaths: string[],
   limit: number,
 ): Promise<void> {
   if (paths.length >= limit) {
@@ -151,9 +154,13 @@ async function collectProjects(
       schemePaths.push(join(root, entry.name));
     } else if (entry.isFile() && entry.name.endsWith(".xcconfig") && xcconfigPaths.length < limit) {
       xcconfigPaths.push(join(root, entry.name));
+    } else if (entry.isFile() && entry.name === "contents.xcworkspacedata" && workspacePaths.length < limit) {
+      workspacePaths.push(join(root, entry.name));
     }
   }
-  await Promise.all(subdirectories.map((path) => collectProjects(path, paths, schemePaths, xcconfigPaths, limit)));
+  await Promise.all(
+    subdirectories.map((path) => collectProjects(path, paths, schemePaths, xcconfigPaths, workspacePaths, limit)),
+  );
 }
 
 /** How a swept file fared, from strongest fidelity to failure. */
@@ -206,15 +213,18 @@ async function plutilAccepts(path: string): Promise<boolean> {
 const options = parseArgs(process.argv.slice(2));
 
 console.log(
-  `collecting project.pbxproj, .xcscheme, and .xcconfig files under ${options.roots.join(", ")} (max ${options.maxFiles})`,
+  `collecting project.pbxproj, .xcscheme, .xcconfig, and .xcworkspacedata files under ${options.roots.join(", ")} (max ${options.maxFiles})`,
 );
 const paths: string[] = [];
 const schemePaths: string[] = [];
 const xcconfigPaths: string[] = [];
+const workspacePaths: string[] = [];
 for (const root of options.roots) {
-  await collectProjects(root, paths, schemePaths, xcconfigPaths, options.maxFiles);
+  await collectProjects(root, paths, schemePaths, xcconfigPaths, workspacePaths, options.maxFiles);
 }
-console.log(`found ${paths.length} projects, ${schemePaths.length} schemes, ${xcconfigPaths.length} xcconfigs\n`);
+console.log(
+  `found ${paths.length} projects, ${schemePaths.length} schemes, ${xcconfigPaths.length} xcconfigs, ${workspacePaths.length} workspaces\n`,
+);
 
 const counts = new Map<Outcome, number>();
 const parsed: ParsedFile[] = [];
@@ -424,6 +434,37 @@ for (const path of schemePaths) {
   }
 }
 
+// Workspace sweep. Every readable contents.xcworkspacedata must parse
+// and reach a byte-stable fixed point, and Xcode-written files are
+// expected byte-exact, like schemes.
+const workspaceCounts = new Map<string, number>();
+for (const path of workspacePaths) {
+  let text: string;
+  try {
+    text = await readFile(path, "utf-8");
+  } catch {
+    continue; // unreadable file, nothing to audit
+  }
+  if (text.length === 0) {
+    continue;
+  }
+
+  try {
+    const built = buildXcworkspace(parseXcworkspace(text));
+    if (built === text) {
+      workspaceCounts.set("byte-exact", (workspaceCounts.get("byte-exact") ?? 0) + 1);
+    } else if (buildXcworkspace(parseXcworkspace(built)) === built) {
+      workspaceCounts.set("canonicalized", (workspaceCounts.get("canonicalized") ?? 0) + 1);
+    } else {
+      workspaceCounts.set("unstable", (workspaceCounts.get("unstable") ?? 0) + 1);
+      findings.push(`${path}: workspace round-trip is not a fixed point`);
+    }
+  } catch (error) {
+    workspaceCounts.set("parse-failure", (workspaceCounts.get("parse-failure") ?? 0) + 1);
+    findings.push(`${path}: workspace failed to parse, ${String(error)}`);
+  }
+}
+
 // Xcconfig sweep. The format is hand-authored with no canonical writer,
 // so the bar is lossless reproduction, where parse and build must return
 // the input byte for byte. Parse failures are findings because the parser
@@ -460,6 +501,11 @@ for (const [outcome, count] of [...schemeCounts.entries()].toSorted((a, b) => b[
   console.log(`  ${outcome.padEnd(20)} ${String(count).padStart(6)}`);
 }
 
+console.log("\n=== workspaces ===");
+for (const [outcome, count] of [...workspaceCounts.entries()].toSorted((a, b) => b[1] - a[1])) {
+  console.log(`  ${outcome.padEnd(20)} ${String(count).padStart(6)}`);
+}
+
 console.log("\n=== xcconfigs ===");
 for (const [outcome, count] of [...xcconfigCounts.entries()].toSorted((a, b) => b[1] - a[1])) {
   console.log(`  ${outcome.padEnd(20)} ${String(count).padStart(6)}`);
@@ -483,5 +529,5 @@ if (findings.length > 0) {
   process.exit(1);
 }
 console.log(
-  "\nno findings: every readable project, scheme, and xcconfig parses, round-trips stably, agrees with plutil, and survives model edits",
+  "\nno findings: every readable project, scheme, workspace, and xcconfig parses, round-trips stably, agrees with plutil, and survives model edits",
 );

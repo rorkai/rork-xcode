@@ -280,6 +280,25 @@ const text = scheme.build();
 
 Underneath, the document is a plain tree of elements with ordered attributes and children, reachable through `scheme.root` and `scheme.elements(name)`, so anything the typed surface does not cover stays one property away. `parseXcscheme` and `buildXcscheme` remain available for working with the tree directly. Attribute order is preserved and meaningful, which is how byte-identical round-trips fall out. Comments are kept, attribute values resolve the character references Xcode writes (`&quot;`, `&amp;`, `&#10;` and friends), and the writer re-escapes them identically.
 
+## Workspaces
+
+A `.xcworkspace` directory carries a `contents.xcworkspacedata` file listing the projects and folders the workspace shows, in the same XML dialect scheme files use, with the same round-trip contract. An Xcode-written file rebuilds byte for byte, any other input reaches the canonical layout in one build, and malformed input fails with a typed error carrying line and column.
+
+`Xcworkspace` is the model. Its flagship read resolves which projects the workspace references, so tooling stops globbing directory trees and asks the file that already knows:
+
+```ts
+import { Xcworkspace } from "rork-xcode";
+
+const workspace = Xcworkspace.parse(xcworkspacedataText);
+
+workspace.projectFilePaths(); // ["DemoApp.xcodeproj", "Pods/Pods.xcodeproj"]
+
+workspace.addFileRef("group:Vendor/Vendor.xcodeproj");
+const text = workspace.build();
+```
+
+Group locations compose through their enclosing groups, container locations anchor at the workspace's directory, and absolute locations pass through. The resolution is textual, because the library never touches the filesystem, so locations only a running Xcode can resolve (`self` and `developer`) stay out of the list. `Xcworkspace.create` produces the document Xcode writes for a new workspace, file references come back as typed views through `fileRefs()`, and `parseXcworkspace` and `buildXcworkspace` remain available for working with the tree directly.
+
 ## Xcconfig files
 
 Build settings do not only live in the pbxproj. Projects push them into `.xcconfig` files referenced through `baseConfigurationReference`, and the xcconfig module reads and writes that format with the fidelity the rest of the library promises. The format is hand-authored with no canonical layout, so the contract here is losslessness. Parsing and building an untouched file reproduces it byte for byte, including comments, blank lines, column alignment, and line endings. Malformed lines fail loudly with a typed error carrying line and column rather than being dropped, so a file the parser accepts is a file it fully understood.

@@ -100,6 +100,32 @@ export class XcschemeParseError extends Error {
 }
 
 /**
+ * Thrown when the source text is not a well-formed workspace data file
+ * (the XML dialect of `contents.xcworkspacedata` files).
+ *
+ * The message always embeds the line and column of the failure, and the
+ * same information is available in structured form on {@link position}
+ * for programmatic use.
+ */
+export class XcworkspaceParseError extends Error {
+  /** Where in the source text parsing failed. */
+  readonly position: PbxprojErrorPosition;
+
+  /**
+   * @param message Failure description without location. The location is
+   *   appended automatically.
+   * @param source Full source text, used to compute the position.
+   * @param offset Character offset of the failure inside `source`.
+   */
+  constructor(message: string, source: string, offset: number) {
+    const position = positionAt(source, offset);
+    super(`${message} (line ${position.line}, column ${position.column})`);
+    this.name = "XcworkspaceParseError";
+    this.position = position;
+  }
+}
+
+/**
  * Thrown when the source text is not a well-formed build configuration
  * file (the line-based format of `.xcconfig` files).
  *
@@ -144,6 +170,29 @@ export class XcschemeBuildError extends Error {
   constructor(message: string, path: string) {
     super(`${message} (at ${path})`);
     this.name = "XcschemeBuildError";
+    this.path = path;
+  }
+}
+
+/**
+ * Thrown when a workspace element cannot be written as XML.
+ *
+ * Raised for element and attribute names that are not valid XML names and
+ * for attribute values carrying control characters XML 1.0 cannot encode.
+ * The {@link path} pinpoints the offending element inside the tree.
+ */
+export class XcworkspaceBuildError extends Error {
+  /** Path to the offending element from the root, e.g. `Workspace.FileRef[0]`. */
+  readonly path: string;
+
+  /**
+   * @param message Failure description without location. The element path
+   *   is appended automatically.
+   * @param path Path to the offending element from the root.
+   */
+  constructor(message: string, path: string) {
+    super(`${message} (at ${path})`);
+    this.name = "XcworkspaceBuildError";
     this.path = path;
   }
 }

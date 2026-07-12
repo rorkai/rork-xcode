@@ -13,9 +13,9 @@
  */
 
 import { renameFileNameStem } from "../rename";
+import { xmlElements } from "../xml/types";
 import { buildXcscheme } from "./build";
 import { parseXcscheme } from "./parse";
-import { isXcschemeElement } from "./types";
 
 import type { XcschemeDocument, XcschemeElement } from "./types";
 
@@ -25,19 +25,7 @@ import type { XcschemeDocument, XcschemeElement } from "./types";
  * element.
  */
 export function xcschemeElements(root: XcschemeElement, name?: string): XcschemeElement[] {
-  const found: XcschemeElement[] = [];
-  const visit = (element: XcschemeElement): void => {
-    if (name == null || element.name === name) {
-      found.push(element);
-    }
-    for (const child of element.children) {
-      if (isXcschemeElement(child)) {
-        visit(child);
-      }
-    }
-  };
-  visit(root);
-  return found;
+  return xmlElements(root, name);
 }
 
 /**

@@ -174,8 +174,7 @@ export class Target<Properties extends TargetProperties = TargetProperties> exte
       if (active.has(guard)) {
         return undefined;
       }
-      const nested = new Set(active);
-      nested.add(guard);
+      const nested = new Set([...active, guard]);
 
       for (let layer = fromLayer; layer < layers.length; layer++) {
         const settings = layers[layer];
