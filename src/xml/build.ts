@@ -18,7 +18,7 @@
 
 import { isXmlElement } from "./types";
 
-import type { XmlDocument, XmlElement, XmlNode } from "./types";
+import type { XmlComment, XmlDocument, XmlElement, XmlNode } from "./types";
 
 /**
  * Constructs the format's build error. The core reports failures through
@@ -27,11 +27,45 @@ import type { XmlDocument, XmlElement, XmlNode } from "./types";
  */
 export type XmlBuildErrorFactory = (message: string, path: string) => Error;
 
+/**
+ * The internal failure the renderers throw. It carries the offending
+ * node instead of a path, and {@link buildXmlDocument} resolves the path
+ * by searching the tree only when a failure actually happens, so the
+ * happy path never pays for path bookkeeping.
+ */
+class XmlBuildFailure extends Error {
+  /** The element or comment node the failure points at. */
+  readonly node: XmlNode | null;
+
+  constructor(message: string, node: XmlNode | null) {
+    super(message);
+    this.name = "XmlBuildFailure";
+    this.node = node;
+  }
+}
+
 /** The declaration line Xcode writes at the top of every file. */
 const XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8"?>\n';
 
 /** One indentation step of Xcode's writer. */
 const INDENT = "   ";
+
+/**
+ * Indentation strings by depth, extended on demand. Documents nest a
+ * handful of levels, and reusing the strings keeps the writer from
+ * re-allocating the same prefixes for every node.
+ */
+const INDENTS: string[] = [""];
+
+/**
+ * The indentation prefix for a nesting depth.
+ */
+function indentAt(depth: number): string {
+  for (let known = INDENTS.length; known <= depth; known++) {
+    INDENTS.push(INDENTS[known - 1]! + INDENT);
+  }
+  return INDENTS[depth]!;
+}
 
 /**
  * Matches valid XML names. A stray non-name, such as an empty string or
@@ -41,38 +75,83 @@ const INDENT = "   ";
 const NAME_PATTERN = /^[A-Za-z_:][A-Za-z0-9_:.-]*$/u;
 
 /**
- * Matches everything an attribute value cannot carry, in one scan. The
- * alternatives are the control characters XML 1.0 cannot represent
- * (everything below space except tab, line feed, and carriage return),
- * unpaired surrogate halves, and the two noncharacters at the end of
- * the basic plane. Escaping cannot help any of these, so they fail
- * rather than serialize into a file no parser accepts.
+ * Names that already passed {@link NAME_PATTERN}, capped so hostile
+ * documents cannot grow the set without bound. Element and attribute
+ * vocabularies repeat heavily, so nearly every check after the first is
+ * a set lookup instead of a regex test.
  */
-/* oxlint-disable no-control-regex -- control characters are these patterns' subject, rejected by the first and escaped by the second */
-const INVALID_PATTERN =
-  /[\u0000-\u0008\u000B\u000C\u000E-\u001F]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]|[\uFFFE\uFFFF]/u;
+const VALID_NAMES = new Set<string>();
 
 /**
- * Matches the characters the writer escapes. Most attribute values carry
- * none, and the single test lets them skip the escape chain entirely.
+ * Whether a name is a valid XML name, memoized across documents.
  */
-const ESCAPABLE_PATTERN = /[&<>"'\t\n\r]/u;
-/* oxlint-enable no-control-regex */
+function isValidName(name: string): boolean {
+  if (VALID_NAMES.has(name)) {
+    return true;
+  }
+  if (!NAME_PATTERN.test(name)) {
+    return false;
+  }
+  if (VALID_NAMES.size < 512) {
+    VALID_NAMES.add(name);
+  }
+  return true;
+}
 
 /**
  * Serializes a document to text in Xcode's canonical layout, reporting
  * failures through the given error factory.
  */
 export function buildXmlDocument(document: XmlDocument, makeError: XmlBuildErrorFactory): string {
-  let output = XML_DECLARATION;
-  for (const comment of document.leading) {
-    output += renderComment(comment.comment, 0, "document", makeError);
+  try {
+    let output = XML_DECLARATION;
+    for (const comment of document.leading) {
+      output += renderComment(comment, 0);
+    }
+    output += renderElement(document.root, 0);
+    for (const comment of document.trailing) {
+      output += renderComment(comment, 0);
+    }
+    return output;
+  } catch (error) {
+    if (error instanceof XmlBuildFailure) {
+      throw makeError(error.message, pathOf(document, error.node));
+    }
+    throw error;
   }
-  output += renderElement(document.root, 0, document.root.name, makeError);
-  for (const comment of document.trailing) {
-    output += renderComment(comment.comment, 0, "document", makeError);
+}
+
+/**
+ * Resolves the path of a node for an error message, in the
+ * `Scheme.BuildAction[0]` form, by walking the tree. This runs only when
+ * a build actually fails.
+ */
+function pathOf(document: XmlDocument, node: XmlNode | null): string {
+  if (node == null || document.leading.includes(node as XmlComment) || document.trailing.includes(node as XmlComment)) {
+    return "document";
   }
-  return output;
+  const search = (element: XmlElement, path: string): string | undefined => {
+    if (element === node) {
+      return path;
+    }
+    const seen = new Map<string, number>();
+    for (const child of element.children) {
+      if (!isXmlElement(child)) {
+        if (child === node) {
+          return path;
+        }
+        continue;
+      }
+      const index = seen.get(child.name) ?? 0;
+      seen.set(child.name, index + 1);
+      const found = search(child, `${path}.${child.name}[${index}]`);
+      if (found != null) {
+        return found;
+      }
+    }
+    return undefined;
+  };
+  return search(document.root, document.root.name) ?? document.root.name;
 }
 
 /**
@@ -81,11 +160,12 @@ export function buildXmlDocument(document: XmlDocument, makeError: XmlBuildError
  * reparse at a different terminator, so emitting it would corrupt the
  * document.
  */
-function renderComment(comment: string, depth: number, path: string, makeError: XmlBuildErrorFactory): string {
+function renderComment(node: XmlComment, depth: number): string {
+  const comment = node.comment;
   if (comment.includes("--") || comment.endsWith("-")) {
-    throw makeError("Comments cannot contain -- or end with -", path);
+    throw new XmlBuildFailure("Comments cannot contain -- or end with -", node);
   }
-  return `${INDENT.repeat(depth)}<!--${comment}-->\n`;
+  return `${indentAt(depth)}<!--${comment}-->\n`;
 }
 
 /**
@@ -94,12 +174,12 @@ function renderComment(comment: string, depth: number, path: string, makeError: 
  * attribute, children indent one step, and the close tag is always
  * explicit.
  */
-function renderElement(element: XmlElement, depth: number, path: string, makeError: XmlBuildErrorFactory): string {
-  if (!NAME_PATTERN.test(element.name)) {
-    throw makeError(`Element name ${JSON.stringify(element.name)} is not a valid XML name`, path);
+function renderElement(element: XmlElement, depth: number): string {
+  if (!isValidName(element.name)) {
+    throw new XmlBuildFailure(`Element name ${JSON.stringify(element.name)} is not a valid XML name`, element);
   }
 
-  const indent = INDENT.repeat(depth);
+  const indent = indentAt(depth);
   const names = Object.keys(element.attributes);
 
   let output: string;
@@ -107,61 +187,92 @@ function renderElement(element: XmlElement, depth: number, path: string, makeErr
     output = `${indent}<${element.name}>\n`;
   } else {
     output = `${indent}<${element.name}\n`;
-    const attributeIndent = indent + INDENT;
+    const attributeIndent = indentAt(depth + 1);
     for (let i = 0; i < names.length; i++) {
       const name = names[i]!;
-      if (!NAME_PATTERN.test(name)) {
-        throw makeError(`Attribute name ${JSON.stringify(name)} is not a valid XML name`, path);
+      if (!isValidName(name)) {
+        throw new XmlBuildFailure(`Attribute name ${JSON.stringify(name)} is not a valid XML name`, element);
       }
-      const value = escapeAttribute(element.attributes[name]!, path, name, makeError);
+      const value = escapeAttribute(element.attributes[name]!, element, name);
       const terminator = i === names.length - 1 ? ">" : "";
       output += `${attributeIndent}${name} = "${value}"${terminator}\n`;
     }
   }
 
-  output += renderChildren(element.children, depth + 1, path, makeError);
+  const children = element.children;
+  const childDepth = depth + 1;
+  for (const child of children) {
+    output += isXmlElement(child) ? renderElement(child, childDepth) : renderComment(child, childDepth);
+  }
   output += `${indent}</${element.name}>\n`;
   return output;
 }
 
-/**
- * Renders an element's children in document order, numbering repeated
- * element names in the error path so a failure points at one node.
- */
-function renderChildren(children: XmlNode[], depth: number, path: string, makeError: XmlBuildErrorFactory): string {
-  let output = "";
-  const seen = new Map<string, number>();
-  for (const child of children) {
-    if (isXmlElement(child)) {
-      const index = seen.get(child.name) ?? 0;
-      seen.set(child.name, index + 1);
-      output += renderElement(child, depth, `${path}.${child.name}[${index}]`, makeError);
-    } else {
-      output += renderComment(child.comment, depth, path, makeError);
-    }
-  }
-  return output;
-}
+// UTF-16 code units the value scanner dispatches on.
+const CODE_TAB = 0x09;
+const CODE_LINE_FEED = 0x0a;
+const CODE_CARRIAGE_RETURN = 0x0d;
+const CODE_QUOTE = 0x22;
+const CODE_AMPERSAND = 0x26;
+const CODE_APOSTROPHE = 0x27;
+const CODE_LESS_THAN = 0x3c;
+const CODE_GREATER_THAN = 0x3e;
 
 /**
  * Escapes an attribute value the way Xcode's writer does. XML syntax
  * characters become the five named entities, and tab, line feed, and
  * carriage return become character references so they survive
  * attribute-value normalization on the next parse.
+ *
+ * One pass over the value classifies every code unit, so the common
+ * value with nothing to escape returns as-is after that single scan,
+ * and only values that need work pay for the replacement chain. The
+ * same scan rejects what no XML document can carry, meaning the control
+ * characters XML cannot represent, unpaired surrogate halves, and the
+ * two noncharacters at the end of the basic plane.
  */
-function escapeAttribute(value: string, path: string, attributeName: string, makeError: XmlBuildErrorFactory): string {
-  const invalid = INVALID_PATTERN.exec(value);
-  if (invalid != null) {
-    const code = invalid[0].charCodeAt(0);
-    const codePoint = `U+${code.toString(16).padStart(4, "0").toUpperCase()}`;
-    const message =
-      code < 0x20
-        ? `Attribute ${attributeName} contains the control character ${codePoint}, which XML cannot encode`
-        : `Attribute ${attributeName} contains a code point XML cannot carry (${codePoint})`;
-    throw makeError(message, path);
+function escapeAttribute(value: string, element: XmlElement, attributeName: string): string {
+  let needsEscaping = false;
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if (code < 0x20) {
+      if (code === CODE_TAB || code === CODE_LINE_FEED || code === CODE_CARRIAGE_RETURN) {
+        needsEscaping = true;
+        continue;
+      }
+      throw new XmlBuildFailure(
+        `Attribute ${attributeName} contains the control character U+${code.toString(16).padStart(4, "0").toUpperCase()}, which XML cannot encode`,
+        element,
+      );
+    }
+    if (
+      code === CODE_AMPERSAND ||
+      code === CODE_LESS_THAN ||
+      code === CODE_GREATER_THAN ||
+      code === CODE_QUOTE ||
+      code === CODE_APOSTROPHE
+    ) {
+      needsEscaping = true;
+      continue;
+    }
+    if (code >= 0xd800) {
+      if (code <= 0xdbff) {
+        const next = value.charCodeAt(i + 1);
+        if (next >= 0xdc00 && next <= 0xdfff) {
+          i++;
+          continue;
+        }
+      }
+      if (code <= 0xdfff || code === 0xfffe || code === 0xffff) {
+        throw new XmlBuildFailure(
+          `Attribute ${attributeName} contains a code point XML cannot carry (U+${code.toString(16).padStart(4, "0").toUpperCase()})`,
+          element,
+        );
+      }
+    }
   }
 
-  if (!ESCAPABLE_PATTERN.test(value)) {
+  if (!needsEscaping) {
     return value;
   }
   return value

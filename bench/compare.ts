@@ -25,7 +25,15 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 
-import { buildPbxproj, parsePbxproj, type PbxprojObject } from "../dist/index.js";
+import {
+  buildPbxproj,
+  buildXcscheme,
+  buildXcworkspace,
+  parsePbxproj,
+  parseXcscheme,
+  parseXcworkspace,
+  type PbxprojObject,
+} from "../dist/index.js";
 
 // Both compared packages are CommonJS, and xcode ships no usable types, so
 // they load through require and are typed here at the boundary.
@@ -33,6 +41,16 @@ const require = createRequire(import.meta.url);
 
 const baconsJson = require("@bacons/xcode/json") as {
   build(root: unknown): string;
+  parse(text: string): unknown;
+};
+
+const baconsScheme = require("@bacons/xcode/scheme") as {
+  build(scheme: unknown): string;
+  parse(text: string): unknown;
+};
+
+const baconsWorkspace = require("@bacons/xcode/workspace") as {
+  build(workspace: unknown): string;
   parse(text: string): unknown;
 };
 
@@ -354,4 +372,61 @@ for (const [key, multipliers] of summary) {
   const geometricMean = Math.exp(multipliers.reduce((total, m) => total + Math.log(m), 0) / multipliers.length);
   console.log(`  ${key.padEnd(24)} ${geometricMean.toFixed(2)}x`);
 }
+
+// The XML dialect files, measured against the one npm package that also
+// parses and writes them. The xcode package has no scheme or workspace
+// support, so these sections compare two libraries.
+const xmlFixtures: [name: string, text: string, kind: "scheme" | "workspace"][] = [
+  ["app scheme", readFileSync(new URL("../tests/fixtures/scheme-app.xcscheme", import.meta.url), "utf-8"), "scheme"],
+  [
+    "actions scheme",
+    readFileSync(new URL("../tests/fixtures/scheme-actions.xcscheme", import.meta.url), "utf-8"),
+    "scheme",
+  ],
+  [
+    "grouped workspace",
+    readFileSync(new URL("../tests/fixtures/workspace-groups.xcworkspacedata", import.meta.url), "utf-8"),
+    "workspace",
+  ],
+];
+
+for (const [name, text, kind] of xmlFixtures) {
+  const parse = kind === "scheme" ? parseXcscheme : parseXcworkspace;
+  const build = (kind === "scheme" ? buildXcscheme : buildXcworkspace) as (document: unknown) => string;
+  const baconsModule = kind === "scheme" ? baconsScheme : baconsWorkspace;
+
+  if (build(parse(build(parse(text)))) !== build(parse(text))) {
+    throw new Error(`rork-xcode round-trip is unstable on ${name}`);
+  }
+  baconsModule.parse(baconsModule.build(baconsModule.parse(text)));
+  const ours = parse(text);
+  const theirs = baconsModule.parse(text);
+
+  console.log(`\n=== ${name} (${(text.length / 1024).toFixed(1)} KiB) ===`);
+  for (const [operation, entries] of [
+    [
+      "parse",
+      [
+        ["rork-xcode", () => parse(text)],
+        ["@bacons/xcode", () => baconsModule.parse(text)],
+      ],
+    ],
+    [
+      "build",
+      [
+        ["rork-xcode", () => build(ours)],
+        ["@bacons/xcode", () => baconsModule.build(theirs)],
+      ],
+    ],
+  ] as [string, Entry[]][]) {
+    const results = compare(entries);
+    const best = Math.min(...results.map(([, ns]) => ns));
+    console.log(`  ${operation}`);
+    for (const [label, ns] of results) {
+      const marker = ns === best ? "fastest" : `${(ns / best).toFixed(2)}x slower`;
+      console.log(`    ${label.padEnd(16)} ${formatTime(ns).padStart(9)}  ${marker}`);
+    }
+  }
+}
+
 console.log(`\nchecksum ${sink % 997}`);
