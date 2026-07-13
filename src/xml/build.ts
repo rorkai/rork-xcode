@@ -41,20 +41,23 @@ const INDENT = "   ";
 const NAME_PATTERN = /^[A-Za-z_:][A-Za-z0-9_:.-]*$/u;
 
 /**
- * Matches characters that cannot appear in an attribute value. XML 1.0
- * has no representation for control characters other than tab, line
- * feed, and carriage return.
+ * Matches everything an attribute value cannot carry, in one scan. The
+ * alternatives are the control characters XML 1.0 cannot represent
+ * (everything below space except tab, line feed, and carriage return),
+ * unpaired surrogate halves, and the two noncharacters at the end of
+ * the basic plane. Escaping cannot help any of these, so they fail
+ * rather than serialize into a file no parser accepts.
  */
-// oxlint-disable-next-line no-control-regex -- rejecting control characters is the point of this pattern
-const UNENCODABLE_PATTERN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/u;
+/* oxlint-disable no-control-regex -- control characters are these patterns' subject, rejected by the first and escaped by the second */
+const INVALID_PATTERN =
+  /[\u0000-\u0008\u000B\u000C\u000E-\u001F]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]|[\uFFFE\uFFFF]/u;
 
 /**
- * Matches code units no XML document can carry at all, meaning unpaired
- * surrogate halves and the two noncharacters at the end of the basic
- * plane. Escaping cannot help these, so they fail rather than serialize
- * into a file no parser accepts.
+ * Matches the characters the writer escapes. Most attribute values carry
+ * none, and the single test lets them skip the escape chain entirely.
  */
-const FORBIDDEN_PATTERN = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]|[\uFFFE\uFFFF]/u;
+const ESCAPABLE_PATTERN = /[&<>"'\t\n\r]/u;
+/* oxlint-enable no-control-regex */
 
 /**
  * Serializes a document to text in Xcode's canonical layout, reporting
@@ -147,17 +150,20 @@ function renderChildren(children: XmlNode[], depth: number, path: string, makeEr
  * attribute-value normalization on the next parse.
  */
 function escapeAttribute(value: string, path: string, attributeName: string, makeError: XmlBuildErrorFactory): string {
-  const unencodable = UNENCODABLE_PATTERN.exec(value);
-  if (unencodable != null) {
-    throw makeError(
-      `Attribute ${attributeName} contains the control character U+${unencodable[0].charCodeAt(0).toString(16).padStart(4, "0").toUpperCase()}, which XML cannot encode`,
-      path,
-    );
-  }
-  if (FORBIDDEN_PATTERN.test(value)) {
-    throw makeError(`Attribute ${attributeName} contains a code point XML cannot carry`, path);
+  const invalid = INVALID_PATTERN.exec(value);
+  if (invalid != null) {
+    const code = invalid[0].charCodeAt(0);
+    const codePoint = `U+${code.toString(16).padStart(4, "0").toUpperCase()}`;
+    const message =
+      code < 0x20
+        ? `Attribute ${attributeName} contains the control character ${codePoint}, which XML cannot encode`
+        : `Attribute ${attributeName} contains a code point XML cannot carry (${codePoint})`;
+    throw makeError(message, path);
   }
 
+  if (!ESCAPABLE_PATTERN.test(value)) {
+    return value;
+  }
   return value
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
