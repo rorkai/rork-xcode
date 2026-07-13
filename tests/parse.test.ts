@@ -104,6 +104,21 @@ describe("malformed input", () => {
     }
   });
 
+  it.each([
+    ["LF", "\n"],
+    ["CR", "\r"],
+    ["CRLF", "\r\n"],
+  ])("counts %s line endings when reporting positions", (_name, eol) => {
+    try {
+      parsePbxproj(`{${eol}  key = ;${eol}}`);
+      expect.unreachable("parse should have thrown");
+    } catch (error) {
+      assert(error instanceof PbxprojParseError);
+      expect(error.position.line).toBe(2);
+      expect(error.position.column).toBe(9);
+    }
+  });
+
   it("rejects unterminated structures", () => {
     expect(() => parsePbxproj("{ key = value; ")).toThrow(PbxprojParseError);
     expect(() => parsePbxproj("{ items = (a, b; }")).toThrow(PbxprojParseError);

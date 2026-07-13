@@ -8,8 +8,10 @@
  * @module
  */
 
-/** UTF-16 code unit of `\n`, used to count lines when reporting a failure. */
+// UTF-16 code units of the line terminators, used to count lines when
+// reporting a failure.
 const LINE_FEED = 0x0a;
+const CARRIAGE_RETURN = 0x0d;
 
 /**
  * Location of a parse failure inside the source text, shared by every
@@ -41,13 +43,16 @@ export type PbxprojErrorPosition = TextPosition;
  * Converts a source offset into a position.
  *
  * Runs only when an error is actually thrown, so parsing never pays for line
- * tracking on the happy path.
+ * tracking on the happy path. All three line-ending conventions count as
+ * one break each, with the carriage return of a `\r\n` pair deferring to
+ * its line feed.
  */
 function positionAt(source: string, offset: number): TextPosition {
   let line = 1;
   let lineStart = 0;
   for (let i = 0; i < offset && i < source.length; i++) {
-    if (source.charCodeAt(i) === LINE_FEED) {
+    const code = source.charCodeAt(i);
+    if (code === LINE_FEED || (code === CARRIAGE_RETURN && source.charCodeAt(i + 1) !== LINE_FEED)) {
       line++;
       lineStart = i + 1;
     }
