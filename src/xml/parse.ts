@@ -83,7 +83,7 @@ const NAMED_ENTITIES: Readonly<Record<string, string>> = {
  */
 // oxlint-disable-next-line no-control-regex -- rejecting control characters is the point of this pattern
 const UNCARRIABLE_PATTERN =
-  /[\u0000-\u0008\u000B\u000C\u000E-\u001F]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]|[\uFFFE\uFFFF]/;
+  /[\u0000-\u0008\u000B\u000C\u000E-\u001F]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]|[\uFFFE\uFFFF]/u;
 
 /**
  * Whether a code point is a character XML 1.0 allows in a document.

@@ -163,7 +163,7 @@ function pathOf(document: XmlDocument, node: XmlNode | null): string {
  */
 // oxlint-disable-next-line no-control-regex -- rejecting control characters is the point of this pattern
 const UNCARRIABLE_PATTERN =
-  /[\u0000-\u0008\u000B\u000C\u000E-\u001F]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]|[\uFFFE\uFFFF]/;
+  /[\u0000-\u0008\u000B\u000C\u000E-\u001F]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]|[\uFFFE\uFFFF]/u;
 
 /**
  * Renders one comment, failing on text the comment grammar cannot hold.
@@ -240,7 +240,7 @@ const CODE_GREATER_THAN = 0x3e;
  * miss returns the value with no further work.
  */
 // oxlint-disable-next-line no-control-regex -- the control characters are part of the scanned-for set
-const NEEDS_WORK_PATTERN = /[\u0000-\u001F&<>"'\uD800-\uDFFF\uFFFE\uFFFF]/;
+const NEEDS_WORK_PATTERN = /[\u0000-\u001F&<>"'\uD800-\uDFFF\uFFFE\uFFFF]/u;
 
 /**
  * Escapes an attribute value the way Xcode's writer does. XML syntax
