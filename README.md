@@ -377,14 +377,14 @@ The `:` operators are honored for `lower`, `upper`, `rfc1034identifier` (the map
 
 The XML dialect files measure against `@bacons/xcode`, the one other npm package that parses and writes them (the `xcode` package has no scheme or workspace support):
 
-| Operation | Document                  | `rork-xcode` | `@bacons/xcode` |
-| --------- | ------------------------- | ------------ | --------------- |
-| parse     | app scheme (3.3 KiB)      | **28.1 µs**  | 108.7 µs (3.9×) |
-| parse     | actions scheme (5.8 KiB)  | **46.7 µs**  | 185.7 µs (4.0×) |
-| parse     | grouped workspace (0.7 KiB) | **4.7 µs** | 20.5 µs (4.3×)  |
-| build     | app scheme                | **7.1 µs**   | 8.0 µs (1.1×)   |
-| build     | actions scheme            | **11.9 µs**  | 13.8 µs (1.2×)  |
-| build     | grouped workspace         | **2.2 µs**   | 3.0 µs (1.4×)   |
+| Operation | Document                    | `rork-xcode` | `@bacons/xcode` |
+| --------- | --------------------------- | ------------ | --------------- |
+| parse     | app scheme (3.3 KiB)        | **28.1 µs**  | 108.7 µs (3.9×) |
+| parse     | actions scheme (5.8 KiB)    | **46.7 µs**  | 185.7 µs (4.0×) |
+| parse     | grouped workspace (0.7 KiB) | **4.7 µs**   | 20.5 µs (4.3×)  |
+| build     | app scheme                  | **7.1 µs**   | 8.0 µs (1.1×)   |
+| build     | actions scheme              | **11.9 µs**  | 13.8 µs (1.2×)  |
+| build     | grouped workspace           | **2.2 µs**   | 3.0 µs (1.4×)   |
 
 Measured on an Apple M5 Max, Node.js 24, single thread, with `@bacons/xcode` 1.0.0-alpha.33 and `xcode` 3.0.1. Multipliers are relative to `rork-xcode` on the same row; the ordering also holds on Bun. Reproduce with `pnpm bench:compare`, which interleaves the libraries in round-robin batches and reports the median, after verifying that every library round-trips every fixture.
 
