@@ -77,6 +77,15 @@ const NAMED_ENTITIES: Readonly<Record<string, string>> = {
 };
 
 /**
+ * Matches the characters no XML document can carry, mirroring the
+ * writer's validation so a comment the parser accepts is one the
+ * serializer reproduces.
+ */
+// oxlint-disable-next-line no-control-regex -- rejecting control characters is the point of this pattern
+const UNCARRIABLE_PATTERN =
+  /[\u0000-\u0008\u000B\u000C\u000E-\u001F]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]|[\uFFFE\uFFFF]/;
+
+/**
  * Whether a code point is a character XML 1.0 allows in a document.
  * The excluded ranges are the control characters other than tab, line
  * feed, and carriage return, the surrogate halves, and the two
@@ -291,6 +300,9 @@ class Parser {
     const comment = this.input.slice(this.pos + 4, end);
     if (comment.includes("--") || comment.endsWith("-")) {
       this.fail("Comments cannot contain -- or end with -");
+    }
+    if (UNCARRIABLE_PATTERN.test(comment)) {
+      this.fail("Comments cannot contain characters XML cannot carry");
     }
     this.pos = end + 3;
     return { comment };

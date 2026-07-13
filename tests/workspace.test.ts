@@ -88,10 +88,15 @@ describe("failure modes", () => {
     expect(() => parseXcworkspace("<!-- a -- b -->\n<Workspace>\n</Workspace>")).toThrow(
       "Comments cannot contain -- or end with -",
     );
+    expect(() => parseXcworkspace("<!-- \u0000 -->\n<Workspace>\n</Workspace>")).toThrow("characters XML cannot carry");
 
     const workspace = Xcworkspace.create();
     workspace.document.leading.push({ comment: " trailing dash -" });
     expect(() => workspace.build()).toThrow(XcworkspaceBuildError);
+
+    const forbidden = Xcworkspace.create();
+    forbidden.document.leading.push({ comment: " nul \u0000 " });
+    expect(() => forbidden.build()).toThrow("characters XML cannot carry");
   });
 
   it("rejects building attribute values XML cannot carry", () => {

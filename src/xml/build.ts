@@ -155,15 +155,30 @@ function pathOf(document: XmlDocument, node: XmlNode | null): string {
 }
 
 /**
+ * Matches the characters no XML document can carry, in any context. The
+ * alternatives are the control characters XML cannot represent,
+ * unpaired surrogate halves, and the two noncharacters at the end of
+ * the basic plane. Comments validate against this directly, since
+ * comment text has no escapes to fall back on.
+ */
+// oxlint-disable-next-line no-control-regex -- rejecting control characters is the point of this pattern
+const UNCARRIABLE_PATTERN =
+  /[\u0000-\u0008\u000B\u000C\u000E-\u001F]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]|[\uFFFE\uFFFF]/;
+
+/**
  * Renders one comment, failing on text the comment grammar cannot hold.
  * A `--` inside the text or a `-` against the closing marker would
- * reparse at a different terminator, so emitting it would corrupt the
- * document.
+ * reparse at a different terminator, and characters outside XML's
+ * character set have no escaped form inside a comment, so emitting
+ * either would corrupt the document.
  */
 function renderComment(node: XmlComment, depth: number): string {
   const comment = node.comment;
   if (comment.includes("--") || comment.endsWith("-")) {
     throw new XmlBuildFailure("Comments cannot contain -- or end with -", node);
+  }
+  if (UNCARRIABLE_PATTERN.test(comment)) {
+    throw new XmlBuildFailure("Comments cannot contain characters XML cannot carry", node);
   }
   return `${indentAt(depth)}<!--${comment}-->\n`;
 }
