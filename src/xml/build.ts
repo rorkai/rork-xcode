@@ -161,9 +161,10 @@ function pathOf(document: XmlDocument, node: XmlNode | null): string {
  * the basic plane. Comments validate against this directly, since
  * comment text has no escapes to fall back on.
  */
-// oxlint-disable-next-line no-control-regex -- rejecting control characters is the point of this pattern
+/* oxlint-disable no-control-regex -- rejecting control characters is the point of this pattern */
 const UNCARRIABLE_PATTERN =
   /[\u0000-\u0008\u000B\u000C\u000E-\u001F]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]|[\uFFFE\uFFFF]/u;
+/* oxlint-enable no-control-regex */
 
 /**
  * Renders one comment, failing on text the comment grammar cannot hold.

@@ -81,9 +81,10 @@ const NAMED_ENTITIES: Readonly<Record<string, string>> = {
  * writer's validation so a comment the parser accepts is one the
  * serializer reproduces.
  */
-// oxlint-disable-next-line no-control-regex -- rejecting control characters is the point of this pattern
+/* oxlint-disable no-control-regex -- rejecting control characters is the point of this pattern */
 const UNCARRIABLE_PATTERN =
   /[\u0000-\u0008\u000B\u000C\u000E-\u001F]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]|[\uFFFE\uFFFF]/u;
+/* oxlint-enable no-control-regex */
 
 /**
  * Whether a code point is a character XML 1.0 allows in a document.
