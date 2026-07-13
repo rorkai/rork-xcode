@@ -219,19 +219,32 @@ const CODE_LESS_THAN = 0x3c;
 const CODE_GREATER_THAN = 0x3e;
 
 /**
+ * Matches every code unit the writer must escape, validate, or reject.
+ * Nearly all attribute values contain none of them, and the single
+ * regex test is the cheapest full-string scan the engine offers, so a
+ * miss returns the value with no further work.
+ */
+// oxlint-disable-next-line no-control-regex -- the control characters are part of the scanned-for set
+const NEEDS_WORK_PATTERN = /[\u0000-\u001F&<>"'\uD800-\uDFFF\uFFFE\uFFFF]/;
+
+/**
  * Escapes an attribute value the way Xcode's writer does. XML syntax
  * characters become the five named entities, and tab, line feed, and
  * carriage return become character references so they survive
  * attribute-value normalization on the next parse.
  *
- * One pass over the value classifies every code unit, so the common
- * value with nothing to escape returns as-is after that single scan,
- * and only values that need work pay for the replacement chain. The
- * same scan rejects what no XML document can carry, meaning the control
- * characters XML cannot represent, unpaired surrogate halves, and the
- * two noncharacters at the end of the basic plane.
+ * The common value with nothing to escape returns as-is after one regex
+ * scan. Only values carrying an interesting code unit take the
+ * classifying pass, which escapes what has an escape and rejects what
+ * no XML document can carry, meaning the control characters XML cannot
+ * represent, unpaired surrogate halves, and the two noncharacters at
+ * the end of the basic plane.
  */
 function escapeAttribute(value: string, element: XmlElement, attributeName: string): string {
+  if (!NEEDS_WORK_PATTERN.test(value)) {
+    return value;
+  }
+
   let needsEscaping = false;
   for (let i = 0; i < value.length; i++) {
     const code = value.charCodeAt(i);
