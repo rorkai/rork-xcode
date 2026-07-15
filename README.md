@@ -299,6 +299,8 @@ const text = workspace.build();
 
 Group locations compose through their enclosing groups, container locations anchor at the workspace's directory, and absolute locations pass through. The resolution is textual, because the library never touches the filesystem, so locations only a running Xcode can resolve (`self` and `developer`) stay out of the list. `Xcworkspace.create` produces the document Xcode writes for a new workspace, file references come back as typed views through `fileRefs()`, and `parseXcworkspace` and `buildXcworkspace` remain available for working with the tree directly.
 
+The other files inside a `.xcworkspace`, such as `WorkspaceSettings.xcsettings` and `IDEWorkspaceChecks.plist` under `xcshareddata`, are standard property lists rather than this dialect. [`rork-plist`](https://www.npmjs.com/package/rork-plist) parses and writes them with the same round-trip discipline, and the two libraries compose.
+
 ## Xcconfig files
 
 Build settings do not only live in the pbxproj. Projects push them into `.xcconfig` files referenced through `baseConfigurationReference`, and the xcconfig module reads and writes that format with the fidelity the rest of the library promises. The format is hand-authored with no canonical layout, so the contract here is losslessness. Parsing and building an untouched file reproduces it byte for byte, including comments, blank lines, column alignment, and line endings. Malformed lines fail loudly with a typed error carrying line and column rather than being dropped, so a file the parser accepts is a file it fully understood.
