@@ -8,17 +8,20 @@
  * @module
  */
 
-/** UTF-16 code unit of `\n`, used to count lines when reporting a failure. */
+// UTF-16 code units of the line terminators, used to count lines when
+// reporting a failure.
 const LINE_FEED = 0x0a;
+const CARRIAGE_RETURN = 0x0d;
 
 /**
- * Location of a parse failure inside the source text.
+ * Location of a parse failure inside the source text, shared by every
+ * parse error the library throws.
  *
  * Offsets count UTF-16 code units from the start of the string (the same
  * units `String.prototype.slice` uses), so editors and log tooling can jump
  * straight to the failure.
  */
-export interface PbxprojErrorPosition {
+export interface TextPosition {
   /** Zero-based character offset into the source string. */
   offset: number;
 
@@ -30,16 +33,26 @@ export interface PbxprojErrorPosition {
 }
 
 /**
+ * The name {@link TextPosition} carried before the scheme, workspace, and
+ * xcconfig parsers shared it. Kept as an alias so existing annotations
+ * keep compiling.
+ */
+export type PbxprojErrorPosition = TextPosition;
+
+/**
  * Converts a source offset into a position.
  *
  * Runs only when an error is actually thrown, so parsing never pays for line
- * tracking on the happy path.
+ * tracking on the happy path. All three line-ending conventions count as
+ * one break each, with the carriage return of a `\r\n` pair deferring to
+ * its line feed.
  */
-function positionAt(source: string, offset: number): PbxprojErrorPosition {
+function positionAt(source: string, offset: number): TextPosition {
   let line = 1;
   let lineStart = 0;
   for (let i = 0; i < offset && i < source.length; i++) {
-    if (source.charCodeAt(i) === LINE_FEED) {
+    const code = source.charCodeAt(i);
+    if (code === LINE_FEED || (code === CARRIAGE_RETURN && source.charCodeAt(i + 1) !== LINE_FEED)) {
       line++;
       lineStart = i + 1;
     }
@@ -57,7 +70,7 @@ function positionAt(source: string, offset: number): PbxprojErrorPosition {
  */
 export class PbxprojParseError extends Error {
   /** Where in the source text parsing failed. */
-  readonly position: PbxprojErrorPosition;
+  readonly position: TextPosition;
 
   /**
    * @param message Failure description without location. The location is
@@ -83,7 +96,7 @@ export class PbxprojParseError extends Error {
  */
 export class XcschemeParseError extends Error {
   /** Where in the source text parsing failed. */
-  readonly position: PbxprojErrorPosition;
+  readonly position: TextPosition;
 
   /**
    * @param message Failure description without location. The location is
@@ -100,6 +113,32 @@ export class XcschemeParseError extends Error {
 }
 
 /**
+ * Thrown when the source text is not a well-formed workspace data file
+ * (the XML dialect of `contents.xcworkspacedata` files).
+ *
+ * The message always embeds the line and column of the failure, and the
+ * same information is available in structured form on {@link position}
+ * for programmatic use.
+ */
+export class XcworkspaceParseError extends Error {
+  /** Where in the source text parsing failed. */
+  readonly position: TextPosition;
+
+  /**
+   * @param message Failure description without location. The location is
+   *   appended automatically.
+   * @param source Full source text, used to compute the position.
+   * @param offset Character offset of the failure inside `source`.
+   */
+  constructor(message: string, source: string, offset: number) {
+    const position = positionAt(source, offset);
+    super(`${message} (line ${position.line}, column ${position.column})`);
+    this.name = "XcworkspaceParseError";
+    this.position = position;
+  }
+}
+
+/**
  * Thrown when the source text is not a well-formed build configuration
  * file (the line-based format of `.xcconfig` files).
  *
@@ -109,7 +148,7 @@ export class XcschemeParseError extends Error {
  */
 export class XcconfigParseError extends Error {
   /** Where in the source text parsing failed. */
-  readonly position: PbxprojErrorPosition;
+  readonly position: TextPosition;
 
   /**
    * @param message Failure description without location. The location is
@@ -144,6 +183,29 @@ export class XcschemeBuildError extends Error {
   constructor(message: string, path: string) {
     super(`${message} (at ${path})`);
     this.name = "XcschemeBuildError";
+    this.path = path;
+  }
+}
+
+/**
+ * Thrown when a workspace element cannot be written as XML.
+ *
+ * Raised for element and attribute names that are not valid XML names and
+ * for attribute values carrying control characters XML 1.0 cannot encode.
+ * The {@link path} pinpoints the offending element inside the tree.
+ */
+export class XcworkspaceBuildError extends Error {
+  /** Path to the offending element from the root, e.g. `Workspace.FileRef[0]`. */
+  readonly path: string;
+
+  /**
+   * @param message Failure description without location. The element path
+   *   is appended automatically.
+   * @param path Path to the offending element from the root.
+   */
+  constructor(message: string, path: string) {
+    super(`${message} (at ${path})`);
+    this.name = "XcworkspaceBuildError";
     this.path = path;
   }
 }

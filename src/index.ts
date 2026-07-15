@@ -24,7 +24,10 @@ export {
   XcodeModelError,
   XcschemeBuildError,
   XcschemeParseError,
+  XcworkspaceBuildError,
+  XcworkspaceParseError,
   type PbxprojErrorPosition,
+  type TextPosition,
 } from "./errors";
 export {
   expandBuildSettingReferences,
@@ -94,9 +97,19 @@ export {
 export { parseXcscheme } from "./scheme/parse";
 export { isXcschemeElement } from "./scheme/types";
 export { generateObjectId } from "./uuid";
+export { buildXcworkspace } from "./workspace/build";
+export {
+  parseWorkspaceLocation,
+  WorkspaceFileRef,
+  Xcworkspace,
+  type CreateXcworkspaceOptions,
+  type WorkspaceLocation,
+} from "./workspace/model";
+export { parseXcworkspace } from "./workspace/parse";
 export { buildXcconfig } from "./xcconfig/build";
 export { Xcconfig, type XcconfigIncludeResolver, type XcconfigSettingsOptions } from "./xcconfig/model";
 export { parseXcconfig } from "./xcconfig/parse";
+export { isXmlElement, xmlElements } from "./xml/types";
 
 export type { ProjectIssue, ProjectIssueKind } from "./model/doctor";
 export type {
@@ -138,3 +151,4 @@ export type {
   XcconfigInclude,
   XcconfigStatement,
 } from "./xcconfig/types";
+export type { XmlComment, XmlDocument, XmlElement, XmlNode } from "./xml/types";

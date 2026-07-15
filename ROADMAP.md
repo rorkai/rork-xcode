@@ -12,13 +12,6 @@ is a candidate for first-class API.
 
 ## Near term
 
-### Workspace files
-
-`contents.xcworkspacedata` is the remaining member of the file-format family
-next to the pbxproj and xcscheme. Parsing it lets tooling resolve which
-projects a workspace references instead of globbing the directory tree, and
-the writer follows the same canonical-output rules as the scheme module.
-
 ### Parser fuzzing in CI
 
 The corpus sweep proves fidelity on real projects. A fuzz harness proves the

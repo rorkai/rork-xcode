@@ -141,8 +141,7 @@ function expandReference(
   }
 
   const raw = lookup(name);
-  const nested = new Set(active);
-  nested.add(name);
+  const nested = new Set([...active, name]);
   let value = raw;
   if (raw != null && expandLookupValues) {
     value = expand(raw, lookup, expandLookupValues, nested);

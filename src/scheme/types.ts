@@ -1,5 +1,7 @@
 /**
- * The node model of a scheme document.
+ * The node model of a scheme document. Scheme files share Xcode's XML
+ * dialect with workspace data files, so the shapes here are the shared
+ * XML node types under their scheme names.
  *
  * A parsed `.xcscheme` is a tree of plain objects. Elements carry ordered
  * attributes and child nodes, and comments survive as their own nodes.
@@ -10,6 +12,10 @@
  * @module
  */
 
+import { isXmlElement } from "../xml/types";
+
+import type { XmlComment, XmlDocument, XmlElement, XmlNode } from "../xml/types";
+
 /**
  * An XML element of a scheme document.
  *
@@ -18,31 +24,19 @@
  * round-trip byte-identically. Assigning an existing key keeps its
  * position, and adding a new key appends it.
  */
-export interface XcschemeElement {
-  /** Tag name, for example `Scheme` or `BuildableReference`. */
-  name: string;
-
-  /** Attribute values by name, in document order. */
-  attributes: Record<string, string>;
-
-  /** Child elements and comments, in document order. */
-  children: XcschemeNode[];
-}
+export type XcschemeElement = XmlElement;
 
 /**
  * A comment inside a scheme document. Xcode never writes comments, but
  * hand-edited and tool-generated schemes can carry them, and dropping
  * them would make round-trips lossy.
  */
-export interface XcschemeComment {
-  /** The comment text between `<!--` and `-->`, verbatim. */
-  comment: string;
-}
+export type XcschemeComment = XmlComment;
 
 /**
  * Any node a scheme element can contain.
  */
-export type XcschemeNode = XcschemeElement | XcschemeComment;
+export type XcschemeNode = XmlNode;
 
 /**
  * A parsed scheme file, made of its root element plus any comments
@@ -50,20 +44,11 @@ export type XcschemeNode = XcschemeElement | XcschemeComment;
  * are almost always empty, but files that carry them round-trip without
  * loss.
  */
-export interface XcschemeDocument {
-  /** Comments before the root element. */
-  leading: XcschemeComment[];
-
-  /** The `Scheme` element. */
-  root: XcschemeElement;
-
-  /** Comments after the root element. */
-  trailing: XcschemeComment[];
-}
+export type XcschemeDocument = XmlDocument;
 
 /**
  * Whether a node is an element rather than a comment.
  */
 export function isXcschemeElement(node: XcschemeNode): node is XcschemeElement {
-  return "name" in node;
+  return isXmlElement(node);
 }
