@@ -1,0 +1,113 @@
+{
+  "default-configuration": "Release",
+  "configurations": [
+    "Release",
+  ],
+  "localizations": {
+    "development": "en",
+    "supported": [
+      "Base",
+    ],
+  },
+  "packages": [
+    {
+      "kind": "remote",
+      "repository": "https://github.com/example/example-kit",
+      "version": {
+        "up-to-next-major-version": "2.1.0",
+      },
+    },
+  ],
+  "files": [
+    {
+      "kind": "folder",
+      "path": "Demo",
+      "target-membership": [
+        "Demo",
+      ],
+      "membership-exceptions": [
+        {
+          "target": "Demo",
+          "exclusions": [
+            "Info.plist",
+          ],
+        }, {
+          "build-phase": "Demo/copy/Embed Foundation Extensions",
+          "inclusions": [
+            "com.example.demo.extensionpoint",
+          ],
+        },
+      ],
+    },
+    { "kind": "folder", "path": "DemoWidget", "target-membership": [ "DemoWidget" ] },
+    {
+      "kind": "group",
+      "name": "Products",
+      "children": [
+        { "path": "<PRODUCTS>/Demo.app", "id": "AA1000000000000000000070", "type": "wrapper.application", "index": false },
+        { "path": "<PRODUCTS>/DemoWidget.appex", "id": "AA1000000000000000000071", "type": "wrapper.app-extension", "index": false, "target-membership": [ { "build-phase": "Demo/copy/Embed Foundation Extensions", "header-preservation": "remove-on-copy" } ] },
+      ],
+    },
+  ],
+  "targets": [
+    {
+      "name": "Demo",
+      "id": "AA1000000000000000000020",
+      "product": "Products/Demo.app",
+      "product-type": "application",
+      "dependencies": [
+        "DemoWidget",
+      ],
+      "build-phases": [
+        "compile-sources",
+        "frameworks",
+        "resources",
+        {
+          "kind": "copy",
+          "name": "Embed Foundation Extensions",
+          "bundle-base-path": "plugins-directory",
+        },
+      ],
+      "package-product-members": [
+        {
+          "package": "example-kit",
+          "product-name": "ExampleKit",
+          "build-phase": { "build-phase": "frameworks" },
+        },
+      ],
+      "build-settings": {
+        "CURRENT_PROJECT_VERSION": "1",
+        "GENERATE_INFOPLIST_FILE": "YES",
+        "MARKETING_VERSION": "1.0",
+        "PRODUCT_BUNDLE_IDENTIFIER": "com.example.demo",
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "SDKROOT": "iphoneos",
+        "SWIFT_COMPILATION_MODE[config=Release]": "wholemodule",
+        "SWIFT_VERSION": "5.0",
+      },
+    }, {
+      "name": "DemoWidget",
+      "id": "AA1000000000000000000030",
+      "product": "Products/DemoWidget.appex",
+      "product-type": "app-extension",
+      "build-phases": [
+        "compile-sources",
+        "frameworks",
+      ],
+      "build-settings": {
+        "CURRENT_PROJECT_VERSION": "1",
+        "GENERATE_INFOPLIST_FILE": "YES",
+        "MARKETING_VERSION": "1.0",
+        "PRODUCT_BUNDLE_IDENTIFIER": "com.example.demo.widget",
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "SDKROOT": "iphoneos",
+        "SWIFT_VERSION": "5.0",
+      },
+    },
+  ],
+  "build-settings": {
+    "ALWAYS_SEARCH_USER_PATHS": "NO",
+    "SWIFT_VERSION": "5.0",
+  },
+  "last-upgrade": "17.0",
+}

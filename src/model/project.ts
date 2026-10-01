@@ -15,7 +15,7 @@
 import { buildPbxproj } from "../build";
 import { XcodeModelError } from "../errors";
 import { parsePbxproj } from "../parse";
-import { renameFileNameStem } from "../rename";
+import { renameFileNameStem, renamePathSegments } from "../rename";
 import { generateObjectId } from "../uuid";
 import { pruneOrphanObjects, validateProject, type ProjectIssue } from "./doctor";
 import { DEPLOYMENT_TARGET_KEY, Isa, PRODUCT_FILE_INFO, ProductType, type ApplePlatform, type IsaValue } from "./isa";
@@ -935,21 +935,6 @@ export type BuildPhaseOf<I extends string> = I extends keyof ViewByIsa ? Extract
  */
 function joinPath(prefix: string, segment: string): string {
   return prefix === "" ? segment : `${prefix}/${segment}`;
-}
-
-/**
- * Renames the segments of a path-valued build setting that name the
- * target or one of its products. Settings like `TEST_HOST` embed the
- * product path as
- * `$(BUILT_PRODUCTS_DIR)/SampleApp.app/.../SampleApp`, so each segment
- * is matched whole against the target name. Substring occurrences inside
- * unrelated segments stay untouched.
- */
-function renamePathSegments(value: string, oldName: string, newName: string): string {
-  return value
-    .split("/")
-    .map((segment) => renameFileNameStem(segment, oldName, newName) ?? segment)
-    .join("/");
 }
 
 /**

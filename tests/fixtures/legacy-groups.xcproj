@@ -1,0 +1,89 @@
+{
+  "build-independent-targets-in-parallel": false,
+  "default-configuration": "Release",
+  "configurations": [
+    "Debug",
+    "Release",
+  ],
+  "localizations": {
+    "development": "en",
+    "supported": [
+      "Base",
+    ],
+  },
+  "files": [
+    {
+      "kind": "group",
+      "name": "Sources",
+      "children": [
+        { "path": "Main.m", "encoding": "utf8", "target-membership": [ "Demo/compile-sources" ] },
+        {
+          "kind": "variant-group",
+          "name": "InfoPlist.strings",
+          "target-membership": [
+            "Demo/resources",
+          ],
+          "children": [
+            {
+              "path": "en.lproj/InfoPlist.strings",
+              "encoding": "utf8",
+            },
+          ],
+        },
+      ],
+    }, {
+      "kind": "group",
+      "name": "Products",
+      "children": [
+        { "path": "<PRODUCTS>/Demo.app", "id": "AA2000000000000000000002", "type": "wrapper.application", "index": false },
+      ],
+    }, {
+      "kind": "group",
+      "name": "Recovered References",
+      "children": [
+        { "path": "<SDK>/System/Library/Frameworks/Security.framework", "target-membership": [ { "build-phase": "Demo/frameworks", "is-weak": true } ] },
+      ],
+    },
+  ],
+  "targets": [
+    {
+      "name": "Demo",
+      "id": "AA5000000000000000000001",
+      "product": "Products/Demo.app",
+      "product-type": "application",
+      "build-phases": [
+        "compile-sources",
+        "frameworks",
+        "resources",
+        {
+          "kind": "script",
+          "name": "Run Script",
+          "log-environment-variables": true,
+          "shell": "/bin/sh",
+          "script": [
+            "echo \"building\"",
+            "exit 0",
+            "",
+          ],
+        },
+      ],
+      "build-settings": {
+        "INFOPLIST_FILE": "Demo/Info.plist",
+        "PRODUCT_BUNDLE_IDENTIFIER": "com.example.demo",
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "SWIFT_VERSION": "5.0",
+      },
+    },
+  ],
+  "build-settings": {
+    "GCC_PREPROCESSOR_DEFINITIONS[config=Debug]": [
+      "DEBUG=1",
+      "$(inherited)",
+    ],
+    "IPHONEOS_DEPLOYMENT_TARGET": "12.0",
+    "OTHER_LDFLAGS[config=Debug]": "-ObjC",
+    "SDKROOT": "iphoneos",
+    "VALIDATE_PRODUCT[config=Release]": "YES",
+  },
+  "last-upgrade": "9.4",
+}

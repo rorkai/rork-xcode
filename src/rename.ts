@@ -1,7 +1,7 @@
 /**
- * The stem-matching rule shared by the rename flows. The project model
- * renames product file references and host paths with it, and the scheme
- * model renames buildable names with it, so both sides agree on what
+ * The stem-matching rule shared by the rename flows. Both project models
+ * rename product file references and host paths with it, and the scheme
+ * model renames buildable names with it, so every side agrees on what
  * counts as the renamed target's file.
  *
  * @module
@@ -22,4 +22,19 @@ export function renameFileNameStem(fileName: string, oldName: string, newName: s
     return newName + fileName.slice(oldName.length);
   }
   return undefined;
+}
+
+/**
+ * Renames the segments of a path-valued build setting that name the
+ * target or one of its products. Settings like `TEST_HOST` embed the
+ * product path as
+ * `$(BUILT_PRODUCTS_DIR)/SampleApp.app/.../SampleApp`, so each segment
+ * is matched whole against the target name. Substring occurrences inside
+ * unrelated segments stay untouched.
+ */
+export function renamePathSegments(value: string, oldName: string, newName: string): string {
+  return value
+    .split("/")
+    .map((segment) => renameFileNameStem(segment, oldName, newName) ?? segment)
+    .join("/");
 }
