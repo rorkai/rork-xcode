@@ -4,7 +4,9 @@
  * `project.pbxproj` with this library, and cross-validates a sample against
  * `plutil`, Apple's own property list parser. This is the accuracy audit the
  * committed fixtures cannot provide, and it doubles as a byte-fidelity
- * census over real documents.
+ * census over real documents. Projects saved in Xcode 27's JSON format
+ * (`project.xcproj`) are swept too, along with schemes, workspaces, and
+ * xcconfig files.
  *
  * Per file, the sweep verifies:
  *
@@ -36,16 +38,19 @@ import { parsePlist, type PlistValue } from "rork-plist";
 import {
   buildPbxproj,
   buildXcconfig,
+  buildXcproj,
   buildXcscheme,
   buildXcworkspace,
   parsePbxproj,
   parseXcconfig,
+  parseXcproj,
   parseXcscheme,
   parseXcworkspace,
   PbxprojParseError,
   ProductType,
   XcodeModelError,
   XcodeProject,
+  Xcproj,
   type PbxprojObject,
   type PbxprojValue,
 } from "../dist/index.js";
@@ -128,6 +133,7 @@ async function collectProjects(
   schemePaths: string[],
   xcconfigPaths: string[],
   workspacePaths: string[],
+  xcprojPaths: string[],
   limit: number,
 ): Promise<void> {
   if (paths.length >= limit) {
@@ -156,10 +162,14 @@ async function collectProjects(
       xcconfigPaths.push(join(root, entry.name));
     } else if (entry.isFile() && entry.name === "contents.xcworkspacedata" && workspacePaths.length < limit) {
       workspacePaths.push(join(root, entry.name));
+    } else if (entry.isFile() && entry.name === "project.xcproj" && xcprojPaths.length < limit) {
+      xcprojPaths.push(join(root, entry.name));
     }
   }
   await Promise.all(
-    subdirectories.map((path) => collectProjects(path, paths, schemePaths, xcconfigPaths, workspacePaths, limit)),
+    subdirectories.map((path) =>
+      collectProjects(path, paths, schemePaths, xcconfigPaths, workspacePaths, xcprojPaths, limit),
+    ),
   );
 }
 
@@ -213,17 +223,18 @@ async function plutilAccepts(path: string): Promise<boolean> {
 const options = parseArgs(process.argv.slice(2));
 
 console.log(
-  `collecting project.pbxproj, .xcscheme, .xcconfig, and .xcworkspacedata files under ${options.roots.join(", ")} (max ${options.maxFiles})`,
+  `collecting project.pbxproj, project.xcproj, .xcscheme, .xcconfig, and .xcworkspacedata files under ${options.roots.join(", ")} (max ${options.maxFiles})`,
 );
 const paths: string[] = [];
 const schemePaths: string[] = [];
 const xcconfigPaths: string[] = [];
 const workspacePaths: string[] = [];
+const xcprojPaths: string[] = [];
 for (const root of options.roots) {
-  await collectProjects(root, paths, schemePaths, xcconfigPaths, workspacePaths, options.maxFiles);
+  await collectProjects(root, paths, schemePaths, xcconfigPaths, workspacePaths, xcprojPaths, options.maxFiles);
 }
 console.log(
-  `found ${paths.length} projects, ${schemePaths.length} schemes, ${xcconfigPaths.length} xcconfigs, ${workspacePaths.length} workspaces\n`,
+  `found ${paths.length} projects, ${xcprojPaths.length} JSON projects, ${schemePaths.length} schemes, ${xcconfigPaths.length} xcconfigs, ${workspacePaths.length} workspaces\n`,
 );
 
 const counts = new Map<Outcome, number>();
@@ -465,6 +476,64 @@ for (const path of workspacePaths) {
   }
 }
 
+// JSON project sweep. Every readable project.xcproj must parse and reach
+// a byte-stable fixed point, and Xcode-written files are expected
+// byte-exact. The model then renames the main app target to a probe name
+// and back, and writes and removes a probe setting, and the document must
+// return to its rebuilt bytes after each round trip.
+const xcprojCounts = new Map<string, number>();
+for (const path of xcprojPaths) {
+  let text: string;
+  try {
+    text = await readFile(path, "utf-8");
+  } catch {
+    continue; // unreadable file, nothing to audit
+  }
+
+  let rebuilt: string;
+  try {
+    rebuilt = buildXcproj(parseXcproj(text));
+    if (rebuilt === text) {
+      xcprojCounts.set("byte-exact", (xcprojCounts.get("byte-exact") ?? 0) + 1);
+    } else if (buildXcproj(parseXcproj(rebuilt)) === rebuilt) {
+      xcprojCounts.set("canonicalized", (xcprojCounts.get("canonicalized") ?? 0) + 1);
+    } else {
+      xcprojCounts.set("unstable", (xcprojCounts.get("unstable") ?? 0) + 1);
+      findings.push(`${path}: JSON project round-trip is not a fixed point`);
+      continue;
+    }
+  } catch (error) {
+    xcprojCounts.set("parse-failure", (xcprojCounts.get("parse-failure") ?? 0) + 1);
+    findings.push(`${path}: JSON project failed to parse, ${String(error)}`);
+    continue;
+  }
+
+  try {
+    const project = Xcproj.parse(rebuilt);
+    const app = project.findMainAppTarget("ios") ?? project.targets()[0];
+    const originalName = app?.name;
+    if (app == null || originalName == null) {
+      continue;
+    }
+    const [configuration] = project.configurationNames();
+    app.setBuildSetting("RORK_XCODE_PROBE", "1", configuration == null ? {} : { configuration });
+    app.removeBuildSetting("RORK_XCODE_PROBE");
+    project.renameTarget(app, "RorkXcodeRenameProbe");
+    project.renameTarget(app, originalName);
+    if (project.build() === rebuilt) {
+      xcprojCounts.set("model round-trip", (xcprojCounts.get("model round-trip") ?? 0) + 1);
+    } else {
+      findings.push(`${path}: JSON project model edits did not round-trip`);
+    }
+  } catch (error) {
+    if (error instanceof XcodeModelError) {
+      xcprojCounts.set("model-unsupported", (xcprojCounts.get("model-unsupported") ?? 0) + 1);
+    } else {
+      findings.push(`${path}: JSON project model edits threw unexpectedly, ${String(error)}`);
+    }
+  }
+}
+
 // Xcconfig sweep. The format is hand-authored with no canonical writer,
 // so the bar is lossless reproduction, where parse and build must return
 // the input byte for byte. Parse failures are findings because the parser
@@ -506,6 +575,11 @@ for (const [outcome, count] of [...workspaceCounts.entries()].toSorted((a, b) =>
   console.log(`  ${outcome.padEnd(20)} ${String(count).padStart(6)}`);
 }
 
+console.log("\n=== JSON projects ===");
+for (const [outcome, count] of [...xcprojCounts.entries()].toSorted((a, b) => b[1] - a[1])) {
+  console.log(`  ${outcome.padEnd(20)} ${String(count).padStart(6)}`);
+}
+
 console.log("\n=== xcconfigs ===");
 for (const [outcome, count] of [...xcconfigCounts.entries()].toSorted((a, b) => b[1] - a[1])) {
   console.log(`  ${outcome.padEnd(20)} ${String(count).padStart(6)}`);
@@ -529,5 +603,5 @@ if (findings.length > 0) {
   process.exit(1);
 }
 console.log(
-  "\nno findings: every readable project, scheme, workspace, and xcconfig parses, round-trips stably, agrees with plutil, and survives model edits",
+  "\nno findings: every readable project, JSON project, scheme, workspace, and xcconfig parses, round-trips stably, agrees with plutil, and survives model edits",
 );
