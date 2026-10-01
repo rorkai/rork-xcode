@@ -3,7 +3,7 @@
 [![CI](https://github.com/rorkai/rork-xcode/actions/workflows/ci.yml/badge.svg)](https://github.com/rorkai/rork-xcode/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/rork-xcode)](https://www.npmjs.com/package/rork-xcode)
 
-The [fastest](#performance) zero-dependency Xcode project (`project.pbxproj`) parser, builder, and object model for any JavaScript runtime: browsers, Node.js, Bun, Electron, Cloudflare Workers, and React Native. [Scheme files](#schemes) (`.xcscheme`) are covered with the same round-trip guarantees.
+The [fastest](#performance) zero-dependency Xcode project (`project.pbxproj`) parser, builder, and object model for any JavaScript runtime: browsers, Node.js, Bun, Electron, Cloudflare Workers, and React Native. Xcode 27's [JSON project format](#json-project-format) (`project.xcproj`) and [scheme files](#schemes) (`.xcscheme`) are covered with the same round-trip guarantees.
 
 ```ts
 import { parsePbxproj, buildPbxproj } from "rork-xcode";
@@ -249,6 +249,47 @@ for (const [id, object] of project.objects()) {
 - **Soft reads, loud writes.** Real-world projects can be malformed, so lookups return `undefined` where a document could omit something. Operations that cannot proceed without structure (no root project object, an unknown product type, a view whose object was deleted) throw `XcodeModelError`.
 - **Identity-mapped views.** Two lookups of the same id return the same instance, so views compare with `===`.
 
+## JSON project format
+
+Xcode 27 can save a project as `project.xcproj`, a JSON5 document, in place of `project.pbxproj`. It describes the same project, reorganized for readable diffs. There is no flat object table. Files sit in a nested tree and name the build phases they belong to (`"target-membership": [ "App/compile-sources" ]`), targets refer to each other by name, and the per-configuration settings of a pbxproj fold into one dictionary, where a value that differs between configurations carries a `[config=Name]` condition.
+
+The xcproj module keeps the contract of the rest of the library. A file Xcode wrote rebuilds byte for byte, any other input reaches Xcode's layout in one build, and malformed input fails with a typed error carrying line and column. The parser accepts everything JSON5 allows, from comments to unquoted keys and single-quoted strings, so hand-edited files load the way Xcode loads them. The writer derives Xcode's layout from the project schema, which decides the key order of each record kind, which settings and sets are sorted, and which containers fit on one line. An edit made through the library therefore diffs exactly like the same edit made in Xcode.
+
+```ts
+import { buildXcproj, parseXcproj } from "rork-xcode";
+
+const document = parseXcproj(xcprojText); // plain JSON values, or an XcprojParseError
+const text = buildXcproj(document); // byte-identical for Xcode-written files
+```
+
+`Xcproj` is the model, built on the same document-first design as `XcodeProject`. Views hold only the dictionary they describe, two lookups of the same target return the same view, and `properties` is the escape hatch to the raw dictionary.
+
+```ts
+import { Xcproj } from "rork-xcode";
+
+const project = Xcproj.parse(xcprojText);
+const app = project.findMainAppTarget("ios");
+
+app?.getBuildSetting("PRODUCT_BUNDLE_IDENTIFIER"); // "com.example.app"
+app?.getBuildSetting("DEBUG_INFORMATION_FORMAT", { configuration: "Debug" }); // "dwarf", inherited from the project
+app?.setBuildSetting("MARKETING_VERSION", "1.2.0"); // every configuration
+app?.setBuildSetting("CODE_SIGN_STYLE", "Manual", { configuration: "Debug" });
+
+const text = project.build();
+```
+
+Settings resolve the way they do in the pbxproj model, through the target's settings, the target's xcconfig, the project's settings, and the project's xcconfig, with `registerXcconfig` bringing in the files. Reads without a configuration use the project's default configuration, and list settings such as `LD_RUNPATH_SEARCH_PATHS` read as arrays. Writes without a configuration apply to every configuration. A write for one configuration is folded back the way Xcode saves it, so a value every configuration shares collapses to the plain key and differing values split into `[config=…]` keys. `resolveBuildSetting` expands `$(NAME)` references with the same rules as the pbxproj model.
+
+Because targets are referenced by name, renaming one is more than a field edit. `renameTarget` updates other targets' dependencies and test hosts, the build phase references in file memberships, folder memberships and exception sets, the product file and the target's path to it, and the `TEST_TARGET_NAME`, `TEST_HOST`, and `BUNDLE_LOADER` settings. Name paths switch between their string and array encodings as names gain or lose a `/`. `removeTarget` strips the same references along with the product, its embeddings, and folders only the removed target used. Both were checked against Xcode's own saves of the same edits, byte for byte.
+
+```ts
+const widget = project.findTarget("DemoWidget");
+if (widget) project.removeTarget(widget);
+if (app) project.renameTarget(app, "RenamedApp");
+```
+
+The file tree is reachable through `files()`, `references()`, and `findReference("Products/App.app")`, which resolves name paths the way a target's product does. Reference views expose their kind, name, path, children, and the targets they belong to.
+
 ## Schemes
 
 `.xcscheme` files describe how Xcode builds, runs, tests, and archives a target. They are not property lists but a small XML dialect of their own, and the scheme module covers it with the same contract as the pbxproj functions. An Xcode-written scheme rebuilds byte for byte, any other input reaches Xcode's canonical layout in one build, and malformed input fails with a typed error carrying line and column.
@@ -402,8 +443,9 @@ Measured on an Apple M5 Max, Node.js 24, single thread, with `@bacons/xcode` 1.0
 
 - The committed fixture corpus spans project generations from Xcode 3 to Xcode 16, captured from real projects with identifiers neutralized: synchronized folders with both exception-set kinds, classic groups, variant groups, aggregate and legacy targets, reference proxies, build rules, Swift packages, and a ~100 KiB multiplatform framework project.
 - Documents already in current Xcode's layout must round-trip byte for byte, and documents from other tool generations must normalize to a byte-stable fixed point with unchanged values.
+- The JSON project fixtures are files Xcode 27 wrote, from saving the pbxproj fixtures in its JSON format and from saving target renames, target removals, and settings edits made through the pbxproj model. Each must round-trip byte for byte, must come back to the same bytes from any key order and layout, and must match what the JSON model produces for the same edits. A schema-coverage document exercises every record kind and key of the format.
 - On macOS, the suite cross-validates every fixture and its rebuilt form with `plutil`, Apple's own property list parser and the empirical ground truth for what Apple tooling accepts.
-- A corpus sweep (`pnpm corpus`) walks every Xcode project, scheme, workspace, and xcconfig on the machine, verifies each one parses and reaches a byte-stable fixed point (byte-exact losslessness for xcconfig, which has no canonical layout), exercises the object model against every project, and cross-validates a sample against plutil's own reading.
+- A corpus sweep (`pnpm corpus`) walks every Xcode project (in both formats), scheme, workspace, and xcconfig on the machine, verifies each one parses and reaches a byte-stable fixed point (byte-exact losslessness for xcconfig, which has no canonical layout), exercises the object models against every project, and cross-validates a sample against plutil's own reading.
 - CI runs the full gate on Linux and macOS, and executes the built artifact on the oldest supported Node to enforce the `engines` floor.
 
 ## Releasing
