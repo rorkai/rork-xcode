@@ -180,8 +180,9 @@ function stringOr(value: XcprojValue | undefined, fallback: string): string {
  * The sort key Xcode orders a target's package product members by. That
  * key is the package name, the product name, and the product type
  * (defaulting to `other`), followed by the build phase the product links
- * into, where a named phase sorts by kind and name and an id reference
- * sorts by the id after all of them.
+ * into. A named phase contributes its kind and name, and an id reference
+ * contributes two empty components and then the id, so for the same
+ * product an id reference sorts before every named phase, as in Xcode.
  */
 function packageProductMemberKey(member: XcprojObject): string[] {
   const buildFile = member["build-phase"];

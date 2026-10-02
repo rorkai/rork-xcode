@@ -67,6 +67,14 @@ function project(entries: XcprojObject): XcprojObject {
   return { "default-configuration": "Release", configurations: ["Release"], files: [], ...entries };
 }
 
+/**
+ * Builds a package product member that links one product into the given
+ * build phase.
+ */
+function packageProductMember(phase: string): XcprojObject {
+  return { package: "kit", "product-name": "Kit", "build-phase": { "build-phase": phase } };
+}
+
 describe.each(FIXTURES)("%s", (name) => {
   it("round-trips byte-exact", () => {
     const original = fixture(name);
@@ -143,6 +151,12 @@ describe("layout", () => {
     expect(text).toContain('"supported": [\n      "Base",\n      "de",\n      "fr",\n    ],');
     expect(text).toContain('"target-membership": [ "App", "Widget" ]');
     expect(text).toContain('"ALPHA": "1",\n    "ALPHA[config=Debug]": "2",\n    "ZETA": "1",');
+  });
+
+  it("orders package product members like Xcode, with id phases before named ones", () => {
+    const members = [packageProductMember("resources"), packageProductMember("id:P1")];
+    const text = buildXcproj(project({ targets: [{ name: "App", id: "1", "package-product-members": members }] }));
+    expect(text.indexOf('"build-phase": "id:P1"')).toBeLessThan(text.indexOf('"build-phase": "resources"'));
   });
 
   it("orders sorted keys like Xcode, by code point of the NFC form", () => {
