@@ -123,9 +123,12 @@ const PRUNED_DIRECTORIES = new Set([
 ]);
 
 /**
- * Collects `project.pbxproj` paths under a root, pruning dependency and
- * build directories and skipping unreadable entries. Sibling directories
- * walk concurrently, which matters on wide checkouts.
+ * Collects the paths of every swept format under a root, pruning
+ * dependency and build directories and skipping unreadable entries. Each
+ * format is capped at the limit on its own, and the walk stops only once
+ * every format is full, so a root rich in one format cannot hide the
+ * others. Sibling directories walk concurrently, which matters on wide
+ * checkouts.
  */
 async function collectProjects(
   root: string,
@@ -136,7 +139,9 @@ async function collectProjects(
   xcprojPaths: string[],
   limit: number,
 ): Promise<void> {
-  if (paths.length >= limit) {
+  const full = (): boolean =>
+    [paths, schemePaths, xcconfigPaths, workspacePaths, xcprojPaths].every((list) => list.length >= limit);
+  if (full()) {
     return;
   }
   let entries;
@@ -147,14 +152,14 @@ async function collectProjects(
   }
   const subdirectories: string[] = [];
   for (const entry of entries) {
-    if (paths.length >= limit) {
+    if (full()) {
       return;
     }
     if (entry.isDirectory()) {
       if (!PRUNED_DIRECTORIES.has(entry.name)) {
         subdirectories.push(join(root, entry.name));
       }
-    } else if (entry.isFile() && entry.name === "project.pbxproj") {
+    } else if (entry.isFile() && entry.name === "project.pbxproj" && paths.length < limit) {
       paths.push(join(root, entry.name));
     } else if (entry.isFile() && entry.name.endsWith(".xcscheme") && schemePaths.length < limit) {
       schemePaths.push(join(root, entry.name));
