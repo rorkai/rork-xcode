@@ -165,6 +165,32 @@ export class XcconfigParseError extends Error {
 }
 
 /**
+ * Thrown when the source text is not a well-formed JSON5 document (the
+ * syntax of the `project.xcproj` files Xcode 27 writes).
+ *
+ * The message always embeds the line and column of the failure, and the
+ * same information is available in structured form on {@link position}
+ * for programmatic use.
+ */
+export class XcprojParseError extends Error {
+  /** Where in the source text parsing failed. */
+  readonly position: TextPosition;
+
+  /**
+   * @param message Failure description without location. The location is
+   *   appended automatically.
+   * @param source Full source text, used to compute the position.
+   * @param offset Character offset of the failure inside `source`.
+   */
+  constructor(message: string, source: string, offset: number) {
+    const position = positionAt(source, offset);
+    super(`${message} (line ${position.line}, column ${position.column})`);
+    this.name = "XcprojParseError";
+    this.position = position;
+  }
+}
+
+/**
  * Thrown when a scheme element cannot be written as XML.
  *
  * Raised for element and attribute names that are not valid XML names and
@@ -252,6 +278,31 @@ export class PbxprojBuildError extends Error {
   constructor(message: string, path: string) {
     super(`${message} (at ${path})`);
     this.name = "PbxprojBuildError";
+    this.path = path;
+  }
+}
+
+/**
+ * Thrown when a value cannot be represented in a `project.xcproj`
+ * document.
+ *
+ * Raised for `undefined`, bigints, functions, symbols, class instances,
+ * non-finite numbers, and strings carrying an unpaired surrogate, none of
+ * which JSON text can carry faithfully. The {@link path} pinpoints the
+ * offending value inside the input.
+ */
+export class XcprojBuildError extends Error {
+  /** Path to the offending value from the root, e.g. `$.targets[0].name`. */
+  readonly path: string;
+
+  /**
+   * @param message Failure description without location. The value path is
+   *   appended automatically.
+   * @param path Path to the offending value from the root, `$`.
+   */
+  constructor(message: string, path: string) {
+    super(`${message} (at ${path})`);
+    this.name = "XcprojBuildError";
     this.path = path;
   }
 }

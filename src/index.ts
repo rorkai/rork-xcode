@@ -1,6 +1,6 @@
 /**
- * rork-xcode is a zero-dependency Xcode project (pbxproj) parser and
- * builder.
+ * rork-xcode is a zero-dependency Xcode project (pbxproj and xcproj)
+ * parser and builder.
  *
  * The library is a single ESM artifact with named exports and no
  * environment-conditional entry points, so the same code path runs in
@@ -22,6 +22,8 @@ export {
   PbxprojParseError,
   XcconfigParseError,
   XcodeModelError,
+  XcprojBuildError,
+  XcprojParseError,
   XcschemeBuildError,
   XcschemeParseError,
   XcworkspaceBuildError,
@@ -109,6 +111,15 @@ export { parseXcworkspace } from "./workspace/parse";
 export { buildXcconfig } from "./xcconfig/build";
 export { Xcconfig, type XcconfigIncludeResolver, type XcconfigSettingsOptions } from "./xcconfig/model";
 export { parseXcconfig } from "./xcconfig/parse";
+export { buildXcproj } from "./xcproj/build";
+export {
+  Xcproj,
+  XcprojReference,
+  XcprojTarget,
+  type XcprojBuildSettingOptions,
+  type XcprojResolveBuildSettingOptions,
+} from "./xcproj/model";
+export { parseXcproj } from "./xcproj/parse";
 export { isXmlElement, xmlElements } from "./xml/types";
 
 export type { ProjectIssue, ProjectIssueKind } from "./model/doctor";
@@ -151,4 +162,6 @@ export type {
   XcconfigInclude,
   XcconfigStatement,
 } from "./xcconfig/types";
+export type { XcprojBuildSettingValue } from "./xcproj/settings";
+export type { XcprojArray, XcprojObject, XcprojValue } from "./xcproj/types";
 export type { XmlComment, XmlDocument, XmlElement, XmlNode } from "./xml/types";

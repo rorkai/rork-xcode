@@ -1,0 +1,443 @@
+{
+  "id": "AA0000000000000000000001",
+  "root-group-debug-id": "AA0000000000000000000002",
+  "configuration-list-debug-id": "AA0000000000000000000003",
+  "organization": "Example \"Org\"",
+  "class-prefix": "EX",
+  "build-independent-targets-in-parallel": false,
+  "default-configuration": "Release",
+  "configurations": [
+    { "id": "AA0000000000000000000004", "name": "Debug", "file": "Configs/Debug.xcconfig" },
+    { "name": "Release", "file": { "anchor": "Configs", "relative-path": "Shared/Release.xcconfig" } },
+    "Profile",
+  ],
+  "localizations": {
+    "development": "en",
+    "supported": [
+      "Base",
+      "de",
+      "fr",
+    ],
+  },
+  "imported-products": [
+    {
+      "name": "Remote.framework",
+      "project": "Vendor/Remote.xcodeproj",
+      "target": "Remote",
+      "product-id": "AA0000000000000000000010",
+      "type": "wrapper.framework",
+      "target-membership": [
+        "App/frameworks",
+        { "build-phase": "App/copy/Embed Frameworks", "is-weak": true },
+      ],
+    }, {
+      "path": "Sub/libRemote.a",
+      "project": "Vendor/Remote.xcodeproj",
+      "target": "RemoteStatic",
+      "product-id": "AA0000000000000000000011",
+      "target-membership": [
+      ],
+    },
+  ],
+  "packages": [
+    {
+      "kind": "remote",
+      "repository": "https://example.com/kit.git",
+      "version": {
+        "up-to-next-major-version": "2.1.0",
+      },
+      "traits": [
+        "Zeta",
+        "Alpha",
+      ],
+    }, {
+      "kind": "remote",
+      "repository": "https://example.com/range.git",
+      "version": {
+        "version-range": "1.0.0..<2.0.0",
+      },
+    }, {
+      "kind": "remote",
+      "repository": "https://example.com/beta.git",
+      "version": {
+        "version-range-min": "1.0.0-beta.1",
+        "version-range-max": "2.0.0",
+      },
+    }, {
+      "kind": "remote",
+      "repository": "https://example.com/revision.git",
+      "version": {
+        "revision": "0123456789abcdef",
+      },
+    }, {
+      "kind": "remote",
+      "repository": "https://example.com/branch.git",
+      "version": {
+        "branch": "main",
+      },
+    }, {
+      "kind": "remote",
+      "repository": "https://example.com/exact.git",
+      "version": {
+        "version": "3.0.0",
+      },
+    }, {
+      "kind": "remote",
+      "repository": "https://example.com/minor.git",
+      "version": {
+        "up-to-next-minor-version": "1.4.0",
+      },
+    }, {
+      "kind": "remote",
+      "repository": "https://example.com/unversioned.git",
+    }, {
+      "kind": "local",
+      "path": "Packages/Local",
+      "traits": [
+        "Fast",
+      ],
+    },
+  ],
+  "files": [
+    { "path": "Notes.txt", "id": "AA0000000000000000000020", "type": "text", "signature": "AppleDeveloperProgram:ABCDE12345:Example", "encoding": "unicode", "line-ending": "carriage-return-line-feed", "index": true, "target-membership": [ "App/resources" ] },
+    {
+      "path": "Shared.h",
+      "target-membership": [
+        "App/compile-sources",
+        { "id": "AA0000000000000000000021", "build-phase": "Framework/headers", "platforms": [ "ios", "macos" ], "header-role": "public", "mach-interface-generation": "both", "is-weak": true, "code-sign-on-copy": true, "code-generation": "skip", "header-preservation": "remove-on-copy", "decompress": true, "code-generation-visibility": "project", "arguments": "-fno-objc-arc", "asset-tags": [ "Tag-A", "Tag-B" ] },
+      ],
+    },
+    { "path": "<PROJECT>/Generated/Generated.swift", "target-membership": [ "id:AA0000000000000000000099" ] },
+    { "path": "<USER:SHARED_ROOT>/External.swift", "target-membership": [ { "build-phase": [ { "name": "C/C++ Library" }, "compile-sources" ] } ] },
+    { "path": "\\<Escaped>.txt" },
+    {
+      "kind": "group",
+      "id": "AA0000000000000000000030",
+      "path": "Sources",
+      "name": "Sources Group",
+      "index": false,
+      "children": [
+        { "path": "Nested.swift", "target-membership": [ "App/compile-sources" ] },
+        { "kind": "group", "path": "Empty" },
+      ],
+    }, {
+      "kind": "folder",
+      "id": "AA0000000000000000000040",
+      "path": "AppFolder",
+      "file-types": {
+        "Alpha.dat": "file",
+        "Zeta.dat": "text",
+      },
+      "opaque-folders": [
+        "Assets.bundle",
+        "Web.bundle",
+      ],
+      "target-membership": [
+        "App",
+        "Tests",
+      ],
+      "membership-exceptions": [
+        {
+          "target": "App",
+          "public-headers": [
+            "Public/A.h",
+            "Public/B.h",
+          ],
+          "private-headers": [
+            "Private/A.h",
+            "Private/B.h",
+          ],
+          "compiler-flags": {
+            "Alpha.m": "-fno-objc-arc",
+            "Zeta.m": "-Wno-error",
+          },
+          "exclusions": [
+            "Info.plist",
+            "Zeta.plist",
+          ],
+          "platforms": {
+            "Both.swift": [ "ios", "visionos" ],
+            "macOnly.swift": [ "macos" ],
+          },
+          "attributes": {
+            "Alpha.h": { "is-weak": true, "code-sign-on-copy": true },
+            "Zeta.h": { "header-role": "private" },
+          },
+          "asset-tags": {
+            "Levels/1.png": [ "L1" ],
+            "Levels/2.png": [ "L1", "L2" ],
+          },
+        }, {
+          "build-phase": "App/copy/Embed Frameworks",
+          "inclusions": [
+            "Plugin.appex",
+          ],
+        }, {
+          "target": "Tests",
+        },
+      ],
+      "index": false,
+    },
+    { "kind": "folder", "path": "Widget", "target-membership": [ "Widget" ] },
+    {
+      "kind": "variant-group",
+      "id": "AA0000000000000000000050",
+      "path": "Localized",
+      "name": "Main.storyboard",
+      "index": true,
+      "target-membership": [
+        "App/resources",
+        "Widget/resources",
+      ],
+      "children": [
+        {
+          "path": "Base.lproj/Main.storyboard",
+          "type": "file.storyboard",
+        }, {
+          "path": "fr.lproj/Main.strings",
+          "encoding": "utf8",
+        },
+      ],
+    },
+    { "kind": "variant-group", "name": "Empty.strings" },
+    {
+      "kind": "version-group",
+      "id": "AA0000000000000000000060",
+      "path": "Model.xcdatamodeld",
+      "name": "Model",
+      "current-version": "Model 2.xcdatamodel",
+      "type": "wrapper.xcdatamodel",
+      "index": false,
+      "target-membership": [
+        "App/compile-sources",
+      ],
+      "children": [
+        {
+          "path": "Model 2.xcdatamodel",
+        }, {
+          "path": "Model.xcdatamodel",
+          "type": "wrapper.xcdatamodel",
+        },
+      ],
+    },
+    { "kind": "version-group", "path": "Lean.xcdatamodeld" },
+    {
+      "kind": "group",
+      "name": "Built/Products",
+      "children": [
+        { "path": "<PRODUCTS>/App.app", "id": "AA0000000000000000000070", "type": "wrapper.application", "index": false },
+        { "path": "<PRODUCTS>/a/b.app", "id": "AA0000000000000000000071", "type": "wrapper.application", "index": false },
+      ],
+    },
+  ],
+  "targets": [
+    {
+      "name": "App",
+      "id": "AA00000000000000000000A4",
+      "configuration-list-debug-id": "AA00000000000000000000A3",
+      "product": [
+        {
+          "name": "Built/Products",
+        },
+        "App.app",
+      ],
+      "product-type": "application",
+      "last-swift-update": "26.0",
+      "last-swift-migration": "25.0",
+      "legacy-provisioning-style": "manual",
+      "legacy-team-id": "ABCDE12345",
+      "test-host-target": "Host",
+      "specialized-configurations": [
+        { "name": "Debug", "file": "Configs/App-Debug.xcconfig" },
+        { "id": "AA00000000000000000000A2", "name": "Release" },
+      ],
+      "dependencies": [
+        "Widget",
+        { "target": "Framework", "platforms": [ "ios", "macos" ] },
+        { "kind": "remoteTarget", "project": "Vendor/Remote.xcodeproj", "target": "Remote", "target-id": "AA00000000000000000000A0", "platforms": [ "ios" ] },
+        { "kind": "package", "package": "kit", "id": "AA00000000000000000000A1", "product-name": "Plugin", "product-type": "build-tool-plugin" },
+      ],
+      "build-phases": [
+        "compile-sources",
+        { "kind": "frameworks", "id": "AA0000000000000000000099", "name": "Link" },
+        "resources",
+        {
+          "kind": "copy",
+          "id": "AA0000000000000000000098",
+          "name": "Embed Frameworks",
+          "bundle-base-path": "plugins-directory",
+          "relative-path": "Plugins",
+          "scope": "install",
+        }, {
+          "kind": "script",
+          "id": "AA0000000000000000000097",
+          "name": "Generate",
+          "log-environment-variables": true,
+          "input-paths": [
+            "$(SRCROOT)/in.txt",
+          ],
+          "input-file-list-paths": [
+            "$(SRCROOT)/in.xcfilelist",
+          ],
+          "output-paths": [
+            "$(DERIVED_FILE_DIR)/out.txt",
+          ],
+          "output-file-list-paths": [
+            "$(SRCROOT)/out.xcfilelist",
+          ],
+          "dependency-file": "$(DERIVED_FILE_DIR)/script.d",
+          "run-on-every-build": true,
+          "scope": "install",
+          "shell": "/bin/zsh",
+          "script": [
+            "echo one",
+            "echo two",
+            "",
+          ],
+        }, {
+          "kind": "script",
+          "shell": "/bin/sh",
+          "script": "exit 0\n",
+        }, {
+          "kind": "apple-script",
+          "name": "AppleScript",
+          "is-shared-context": true,
+          "context-name": "Context",
+        },
+      ],
+      "build-rules": [
+        {
+          "name": "Yacc Rule",
+          "id": "AA0000000000000000000090",
+          "processor": "com.apple.compilers.proxy.script",
+          "file-type": "pattern.proxy",
+          "file-patterns": "*.y",
+          "input-files": [
+            "$(SRCROOT)/tool",
+          ],
+          "input-file-lists": [
+            "$(SRCROOT)/in.xcfilelist",
+          ],
+          "output-files": [
+            "$(DERIVED_FILE_DIR)/$(INPUT_FILE_BASE).c",
+          ],
+          "output-file-lists": [
+            "$(SRCROOT)/out.xcfilelist",
+          ],
+          "output-files-compiler-flags": [
+            "-O2",
+          ],
+          "dependency-file": "$(DERIVED_FILE_DIR)/rule.d",
+          "run-once-per-architecture": false,
+          "script": [
+            "first line",
+            "second line",
+            "",
+          ],
+        }, {
+          "processor": "com.apple.compilers.yacc",
+          "file-type": "sourcecode.yacc",
+        },
+      ],
+      "package-product-members": [
+        {
+          "product-name": "Plugin",
+          "product-type": "build-tool-plugin",
+          "build-phase": { "build-phase": "id:AA0000000000000000000081" },
+        }, {
+          "package": "kit",
+          "id": "AA0000000000000000000080",
+          "product-name": "Alpha",
+          "build-phase": { "build-phase": "frameworks", "platforms": [ "ios" ] },
+        }, {
+          "package": "kit",
+          "product-name": "Zeta",
+          "build-phase": { "build-phase": "frameworks" },
+        },
+      ],
+      "build-settings": {
+        "ALPHA": "first",
+        "ESCAPES": "quote \" backslash \\ slash / tab \t newline \n bell \u0007 del  nbsp   separator   emoji 😀",
+        "LIST[config=Debug]": [
+          "$(inherited)",
+          "-DDEBUG",
+        ],
+        "ZETA": "last",
+      },
+    }, {
+      "name": "Custom",
+      "id": "AA00000000000000000000A5",
+      "product": [
+        {
+          "name": "Built/Products",
+        },
+        "b.app",
+      ],
+      "full-product-type": "com.example.product-type.custom",
+    }, {
+      "name": "Everything",
+      "id": "AA00000000000000000000A6",
+      "kind": "aggregate",
+      "dependencies": [
+        "App",
+        "Custom",
+      ],
+    }, {
+      "name": "Make",
+      "id": "AA00000000000000000000A7",
+      "kind": "external-build-system",
+      "build-settings": {
+        "OTHER": "1",
+      },
+      "build-tool-path": "/usr/bin/make",
+      "build-tool-arguments": "$(ACTION)",
+      "build-tool-working-directory": "$(SRCROOT)/tools",
+      "pass-build-settings-in-environment": false,
+    }, {
+      "name": "Widget",
+      "id": "AA00000000000000000000A8",
+      "product-type": "app-extension",
+    }, {
+      "name": "Framework",
+      "id": "AA00000000000000000000A9",
+      "product-type": "framework",
+      "build-phases": [
+        "headers",
+        "compile-sources",
+      ],
+    }, {
+      "name": "C/C++ Library",
+      "id": "AA00000000000000000000AA",
+      "product-type": "library.dynamic",
+      "build-phases": [
+        "compile-sources",
+      ],
+    }, {
+      "name": "Tests",
+      "id": "AA00000000000000000000AB",
+      "product-type": "bundle.unit-test",
+      "test-host-target": "App",
+    }, {
+      "name": "Host",
+      "id": "AA00000000000000000000AC",
+      "product-type": "application",
+    },
+  ],
+  "build-settings": {
+    "ALWAYS_SEARCH_USER_PATHS": "NO",
+    "GCC_PREPROCESSOR_DEFINITIONS[config=Debug]": [
+      "DEBUG=1",
+      "$(inherited)",
+    ],
+    "ONLY_ACTIVE_ARCH[config=Debug]": "YES",
+    "SDKROOT": "iphoneos",
+  },
+  "products-group": [
+    {
+      "name": "Built/Products",
+    },
+  ],
+  "last-upgrade": "27.0",
+  "last-swift-update": "26.1",
+  "last-swift-migration": "26.0",
+}

@@ -12,6 +12,22 @@ is a candidate for first-class API.
 
 ## Near term
 
+### Scaffolding in the JSON project format
+
+The `project.xcproj` model reads, edits settings, renames, and removes
+targets. Creating targets, wiring Swift packages, adding synchronized
+folders, and embedding extensions exist for pbxproj projects today, and
+the same flows belong on the JSON model so tooling can serve projects in
+either format with one set of calls.
+
+### Converting between the two project formats
+
+Xcode 27 reads both `project.pbxproj` and `project.xcproj`, and a project
+can move between them. A converter would let tooling migrate a project
+in either direction without opening Xcode, and it is the natural test
+bed for both models, since a conversion followed by the reverse one must
+return the original document.
+
 ### Parser fuzzing in CI
 
 The corpus sweep proves fidelity on real projects. A fuzz harness proves the
