@@ -323,6 +323,32 @@ describe("scaffolding an extension target", () => {
     expect(phase.dstPath).toBe("$(CONTENTS_FOLDER_PATH)/Watch");
   });
 
+  it("embeds a watchOS widget extension in the watch app under PlugIns", () => {
+    const project = openApp();
+    const host = project.findMainAppTarget("ios");
+    assert(host);
+    const watchApp = project.addNativeTarget({
+      name: "DemoWatch",
+      productType: ProductType.application,
+      buildSettings: { WATCHOS_DEPLOYMENT_TARGET: "11.0", SDKROOT: "watchos" },
+    });
+    host.embed(watchApp);
+
+    const complication = project.addNativeTarget({
+      name: "DemoWatchWidget",
+      productType: ProductType.appExtension,
+      buildSettings: { WATCHOS_DEPLOYMENT_TARGET: "11.0", SDKROOT: "watchos" },
+    });
+    expect(complication.isWatchOS()).toBe(true);
+
+    const phase = watchApp.embed(complication);
+    assert(phase);
+    expect(phase.name).toBe("Embed Foundation Extensions");
+    expect(phase.dstSubfolderSpec).toBe(CopyFilesDestination.plugins);
+    expect(phase.dstPath).toBe("");
+    expect(watchApp.embeddedTargets()).toEqual([complication]);
+  });
+
   it("reads embedded targets back through the copy-files phases", () => {
     const project = openApp();
     const host = project.findMainAppTarget("ios");
