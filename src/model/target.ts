@@ -479,7 +479,10 @@ export class NativeTarget extends Target<NativeTargetProperties> {
       return undefined;
     }
 
-    const destination = embedDestinationFor(extension.isWatchOS() ? ProductType.watchApp : extension.productType);
+    // A watchOS extension, such as a complication's widget extension inside
+    // a watch app, embeds by its product type under PlugIns like any other.
+    const isWatchApplication = extension.isWatchOS() && !extension.productType?.includes("extension");
+    const destination = embedDestinationFor(isWatchApplication ? ProductType.watchApp : extension.productType);
     const phase = this.ensureBuildPhase(Isa.copyFilesBuildPhase, { name: destination.phaseName });
 
     // Destination fields are written unconditionally, so a pre-existing
